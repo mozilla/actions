@@ -60,7 +60,7 @@ runs:
       env:
         MIN_VERSION: ${{ steps.min-version.outputs.minimum }}
       shell: bash
-      if: inputs.target == ''
+      if: ${{ runner.os != 'Windows' && inputs.target == '' }}
       run: |
         nss_version=$(pkg-config --modversion nss 2>/dev/null)
         if ! pkg-config --atleast-version "$MIN_VERSION" nss; then
