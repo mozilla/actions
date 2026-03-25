@@ -17,46 +17,19 @@
   },
   "customManagers": [
     {
-      "description": "actionlint version in actionlint workflow",
+      "description": "Pinned tool versions annotated with '# renovate: depName=X datasource=Y [versioning=Z]'",
       "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/actionlint\\.yml$/"],
-      "matchStrings": ["VERSION: \"(?<currentValue>[0-9.]+)\""],
-      "depNameTemplate": "rhysd/actionlint",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "description": "cargo-binstall version in rust action",
-      "customType": "regex",
-      "managerFilePatterns": ["/^rust/action\\.yml$/"],
-      "matchStrings": ["binstall.*# v(?<currentValue>[0-9.]+)"],
-      "depNameTemplate": "cargo-bins/cargo-binstall",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "description": "NSS version",
-      "customType": "regex",
-      "managerFilePatterns": ["/^nss/nss-versions\\.env$/"],
-      "matchStrings": ["NSS_VERSION=(?<currentValue>[0-9.]+)"],
-      "depNameTemplate": "nss",
-      "datasourceTemplate": "custom.nss",
-      "versioningTemplate": "loose"
-    },
-    {
-      "description": "NSPR version",
-      "customType": "regex",
-      "managerFilePatterns": ["/^nss/nss-versions\\.env$/"],
-      "matchStrings": ["NSPR_VERSION=(?<currentValue>[0-9.]+)"],
-      "depNameTemplate": "nspr",
-      "datasourceTemplate": "custom.nspr",
-      "versioningTemplate": "semver"
-    },
-    {
-      "description": "application-services version in NSS Android build",
-      "customType": "regex",
-      "managerFilePatterns": ["/^nss/action\\.yml$/"],
-      "matchStrings": ["VERSION=\"v(?<currentValue>[0-9.]+)\""],
-      "depNameTemplate": "mozilla/application-services",
-      "datasourceTemplate": "github-releases"
+      "managerFilePatterns": [
+        "/\\.github/workflows/.*\\.yml$/",
+        "/action\\.yml$/",
+        "/\\.env$/"
+      ],
+      "matchStrings": [
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION: \"(?<currentValue>[0-9][0-9.]*)\"",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION=\"v(?<currentValue>[0-9][0-9.]*)\"",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)"
+      ]
     }
   ],
   "packageRules": [

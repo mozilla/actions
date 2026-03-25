@@ -110,6 +110,7 @@ runs:
         GITHUB_TOKEN: ${{ inputs.token }}
         TOOLS: ${{ inputs.tools }}
       run: |
+        # renovate: depName=cargo-bins/cargo-binstall datasource=github-releases
         curl -L --proto '=https' --tlsv1.2 -sSf \
           https://raw.githubusercontent.com/cargo-bins/cargo-binstall/ec80feb9e330418e014932e5982599255eff6dbb/install-from-binstall-release.sh | bash # v1.17.4
 

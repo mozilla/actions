@@ -245,9 +245,9 @@ runs:
         # build process doesn't provide.
         [ "$RUNNER_OS" != "Windows" ] && export CFLAGS="-ggdb3 -fno-omit-frame-pointer"
         if [[ $TARGET_PLATFORM == *-android* ]]; then
-          # TODO: The application-services version below must be updated when
-          # NSS versions change, as the build script references library names
-          # that may change across NSS releases.
+          # renovate: depName=mozilla/application-services datasource=github-releases
+          # TODO: This version must also be updated when NSS versions change,
+          # as the build script references library names that may change across NSS releases.
           VERSION="v149.0"
           for file in build-nss-android.sh build-android-common.sh; do
             curl -o "$file" -sSf "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
