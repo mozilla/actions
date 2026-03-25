@@ -1,0 +1,27 @@
+name: Renovate # zizmor: ignore[excessive-permissions]
+on:
+  schedule:
+    - cron: "0 0 * * 1" # Weekly on Monday
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
+
+jobs:
+  renovate:
+    name: Renovate
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write # Required to create branches for dependency update PRs
+      pull-requests: write # Required to open dependency update PRs
+    steps:
+      - name: Run Renovate
+        run: |
+          docker run --rm \
+            -e RENOVATE_TOKEN \
+            renovate/renovate \
+            mozilla/actions
+        env:
+          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
