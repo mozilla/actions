@@ -1,0 +1,28 @@
+name: Format
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  format:
+    name: Format
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - this repo's own action, versioned by tag
+        with:
+          version: nightly
+          components: rustfmt
+          token: ${{ github.token }}
+
+      - run: cargo fmt --all -- --check
