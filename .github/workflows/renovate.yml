@@ -1,8 +1,10 @@
-name: Renovate # zizmor: ignore[excessive-permissions]
+name: Renovate
 on:
   schedule:
     - cron: "0 0 * * 1" # Weekly on Monday
   workflow_dispatch:
+
+permissions: {}
 
 concurrency:
   group: ${{ github.workflow }}
@@ -13,9 +15,7 @@ jobs:
     name: Renovate
     runs-on: ubuntu-24.04
     timeout-minutes: 15
-    permissions:
-      contents: write # Required to create branches for dependency update PRs
-      pull-requests: write # Required to open dependency update PRs
+    permissions: {} # PAT carries all required permissions; GITHUB_TOKEN is unused
     steps:
       - name: Run Renovate
         run: |
@@ -24,4 +24,4 @@ jobs:
             renovate/renovate \
             mozilla/actions
         env:
-          RENOVATE_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RENOVATE_TOKEN: ${{ secrets.RENOVATE }} # zizmor: ignore[secrets-outside-env]
