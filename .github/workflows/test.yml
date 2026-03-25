@@ -1,0 +1,116 @@
+name: Test Actions
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  test-rust:
+    name: Test rust action
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./rust
+        with:
+          version: stable
+          tools: cargo-nextest
+          token: ${{ github.token }}
+
+      - name: Verify installation
+        run: |
+          cargo --version
+          rustc --version
+          cargo nextest --version
+
+  test-toolchains:
+    name: Test toolchains action
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    # cargo is pre-installed on GitHub-hosted Ubuntu runners
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Create test Cargo.toml
+        run: |
+          mkdir -p /tmp/test-crate/src
+          cat > /tmp/test-crate/Cargo.toml << 'EOF'
+          [package]
+          name = "test-crate"
+          version = "0.1.0"
+          rust-version = "1.70.0"
+          edition = "2021"
+          EOF
+          touch /tmp/test-crate/src/lib.rs
+
+      - uses: ./toolchains
+        id: toolchains
+        with:
+          working-directory: /tmp/test-crate
+
+      - name: Verify output
+        env:
+          TOOLCHAINS: ${{ steps.toolchains.outputs.toolchains }}
+        run: |
+          echo "Toolchains: $TOOLCHAINS"
+          python3 -c "
+          import os, json
+          data = json.loads(os.environ['TOOLCHAINS'])
+          assert len(data) == 3, f'Expected 3 toolchains, got {data}'
+          assert '1.70.0' in data, f'Expected MSRV 1.70.0 in {data}'
+          assert 'stable' in data, f'Expected stable in {data}'
+          assert 'nightly' in data, f'Expected nightly in {data}'
+          print('OK:', data)
+          "
+
+  test-nss:
+    name: Test nss action
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./nss
+        with:
+          minimum-version: "3.90"
+
+      - name: Verify NSS is available
+        run: |
+          if [ -n "$NSS_DIR" ]; then
+            echo "NSS_DIR=$NSS_DIR (built from source)"
+          else
+            pkg-config --modversion nss
+            echo "Using system NSS: $(pkg-config --modversion nss)"
+          fi

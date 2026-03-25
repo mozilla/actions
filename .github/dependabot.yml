@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directories:
+      - /
+      - /*
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 10
+      # "semver" not supported for github-actions; see https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#configuration-of-cooldown

@@ -1,0 +1,79 @@
+name: Lint GitHub Actions workflows
+on:
+  pull_request:
+    paths:
+      - ".github/**"
+      - "*/action.yml"
+  merge_group:
+  workflow_call:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow_ref }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  actionlint:
+    name: actionlint
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Download actionlint
+        id: get_actionlint
+        env:
+          VERSION: "1.7.11"
+          # SHA-256 from https://github.com/rhysd/actionlint/releases/download/v1.7.11/actionlint_1.7.11_checksums.txt
+          SHA256: "900919a84f2229bac68ca9cd4103ea297abc35e9689ebb842c6e34a3d1b01b0a"
+        run: |
+          archive="actionlint_${VERSION}_linux_amd64.tar.gz"
+          curl --proto '=https' --tlsv1.2 -sSfL \
+            "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${archive}" \
+            -o "${archive}"
+          echo "${SHA256}  ${archive}" | sha256sum -c
+          tar xzf "${archive}" actionlint
+          rm "${archive}"
+          echo "executable=$(pwd)/actionlint" >> "$GITHUB_OUTPUT"
+
+      - name: Check workflow files
+        env:
+          ACTIONLINT: ${{ steps.get_actionlint.outputs.executable }}
+        run: |
+          # $err is a Go template variable, not a bash variable.
+          # shellcheck disable=SC2016
+          $ACTIONLINT -color \
+            -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}} [{{$err.Kind}}]{{end}}'
+
+  zizmor:
+    name: zizmor
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    permissions:
+      security-events: write # Required to upload SARIF results to GitHub
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7.6.0
+        with:
+          enable-cache: false
+
+      - name: Run zizmor
+        run: uvx zizmor --persona auditor --format sarif . > results.sarif
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: github/codeql-action/upload-sarif@38697555549f1db7851b81482ff19f1fa5c4fedc # v4.34.1
+        with:
+          sarif_file: results.sarif
+          category: zizmor
