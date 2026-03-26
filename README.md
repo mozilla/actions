@@ -57,6 +57,7 @@ Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
     version-file: nss/min_version.txt # File containing the minimum version
     target: "" # Cross-compilation target (e.g. aarch64-linux-android)
     sccache: false # Whether to enable sccache for NSS compilation (default: false)
+    token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)
 ```
 
 If the `rust` action was called with `sccache: true` earlier in the same job, the `nss`

@@ -19,6 +19,9 @@ inputs:
   sccache:
     description: Whether to enable sccache for NSS compilation caching
     default: "false"
+  token:
+    description: "A GitHub PAT; used to avoid rate limits when fetching build scripts"
+    required: false
 
 runs:
   using: composite
@@ -243,6 +246,7 @@ runs:
       env:
         TARGET_PLATFORM: ${{ inputs.target }}
         RUNNER_OS: ${{ runner.os }}
+        GITHUB_TOKEN: ${{ inputs.token }}
       run: |
         # We want to do an optimized build for accurate CPU profiling, but
         # we also want debug symbols and frame pointers for that, which the normal optimized NSS
@@ -254,7 +258,9 @@ runs:
           # renovate: depName=mozilla/application-services datasource=github-releases
           VERSION="v150.0"
           for file in build-nss-android.sh build-android-common.sh; do
-            curl -o "$file" -sSf "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
+            curl -o "$file" -sSf \
+              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
+              "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
             chmod +x "$file"
           done
           # See https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md#android
