@@ -13,6 +13,12 @@ permissions:
   contents: read
 
 jobs:
+  actionlint:
+    uses: ./.github/workflows/actionlint.yml
+
+  dependency-review:
+    uses: ./.github/workflows/dependency-review.yml
+
   test-rust:
     name: Test rust action
     timeout-minutes: 20

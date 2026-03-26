@@ -149,11 +149,12 @@ Runs [`cargo-mutants`](https://mutants.rs) on the diff introduced by a PR,
 checking that each mutation is caught by the test suite. Posts results as a
 job summary.
 
-### `mutants.yml` — Full mutation testing (scheduled)
+### `mutants.yml` — Full mutation testing
 
 Runs `cargo-mutants` across the entire codebase in parallel shards
-(configurable via `shards` input). Designed for weekly scheduled runs. Merges
-shard results and posts a summary with missed/caught/timeout counts.
+(configurable via `shards` input). Designed for scheduled runs — callers must
+provide their own `schedule` trigger. Merges shard results and posts a summary
+with missed/caught/timeout counts.
 
 ### `semver.yml` — Semver compatibility
 

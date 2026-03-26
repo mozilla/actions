@@ -7,15 +7,9 @@
 #
 # Source repository: https://github.com/actions/dependency-review-action
 name: "Dependency Review"
-on:
-  pull_request:
-  merge_group:
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
   workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow_ref }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
