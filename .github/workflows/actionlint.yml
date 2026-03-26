@@ -40,7 +40,9 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSfL \
             "https://github.com/rhysd/actionlint/releases/download/v${VERSION}/${archive}" \
             -o "${archive}"
-          echo "${SHA256}  ${archive}" | sha256sum -c
+          actual=$(sha256sum "${archive}" | cut -d' ' -f1)
+          echo "sha256(${archive}): expected=${SHA256} actual=${actual}"
+          [ "$actual" = "$SHA256" ] || { echo "Checksum mismatch!"; exit 1; }
           tar xzf "${archive}" actionlint
           rm "${archive}"
           echo "executable=$(pwd)/actionlint" >> "$GITHUB_OUTPUT"
