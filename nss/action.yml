@@ -82,10 +82,12 @@ runs:
         echo "Retrieving NSS $NSS_VERSION from $NSS_URL"
         curl -L -o nss.tar.gz "$NSS_URL"
         if command -v sha256sum &>/dev/null; then
-          echo "$NSS_SHA256  nss.tar.gz" | sha256sum -c
+          actual=$(sha256sum nss.tar.gz | cut -d' ' -f1)
         else
-          echo "$NSS_SHA256  nss.tar.gz" | shasum -a 256 -c
+          actual=$(shasum -a 256 nss.tar.gz | cut -d' ' -f1)
         fi
+        echo "sha256(nss.tar.gz): expected=$NSS_SHA256 actual=$actual"
+        [ "$actual" = "$NSS_SHA256" ] || { echo "Checksum mismatch!"; exit 1; }
         tar xzf nss.tar.gz --strip-components=1
         rm nss.tar.gz
         echo "version=$NSS_VERSION" >> "$GITHUB_OUTPUT"
@@ -101,10 +103,12 @@ runs:
         echo "Retrieving NSPR $NSPR_VERSION from $NSPR_URL"
         curl -L -o nspr.tar.gz "$NSPR_URL"
         if command -v sha256sum &>/dev/null; then
-          echo "$NSPR_SHA256  nspr.tar.gz" | sha256sum -c
+          actual=$(sha256sum nspr.tar.gz | cut -d' ' -f1)
         else
-          echo "$NSPR_SHA256  nspr.tar.gz" | shasum -a 256 -c
+          actual=$(shasum -a 256 nspr.tar.gz | cut -d' ' -f1)
         fi
+        echo "sha256(nspr.tar.gz): expected=$NSPR_SHA256 actual=$actual"
+        [ "$actual" = "$NSPR_SHA256" ] || { echo "Checksum mismatch!"; exit 1; }
         tar xzf nspr.tar.gz --strip-components=1
         rm nspr.tar.gz
         echo "version=$NSPR_VERSION" >> "$GITHUB_OUTPUT"
@@ -248,7 +252,7 @@ runs:
           # TODO: This version must also be updated when NSS versions change,
           # as the build script references library names that may change across NSS releases.
           # renovate: depName=mozilla/application-services datasource=github-releases
-          VERSION="v149.0"
+          VERSION="v150.0"
           for file in build-nss-android.sh build-android-common.sh; do
             curl -o "$file" -sSf "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
             chmod +x "$file"
