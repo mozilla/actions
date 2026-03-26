@@ -114,3 +114,41 @@ jobs:
             pkg-config --modversion nss
             echo "Using system NSS: $(pkg-config --modversion nss)"
           fi
+
+  test-nss-android:
+    name: Test nss action (Android)
+    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+        with:
+          distribution: zulu
+          java-version: 23
+
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+        with:
+          accept-android-sdk-licenses: true
+          log-accepted-android-sdk-licenses: false
+
+      - name: Install Android NDK
+        run: |
+          # NDK version matches Mozilla's official build toolchain.
+          # See https://searchfox.org/mozilla-central/search?q=NDK_VERSION=&path=python/mozboot/mozboot/android.py
+          sdkmanager --install "ndk;27.2.12479018"
+
+      - uses: ./nss
+        with:
+          minimum-version: "3.90"
+          target: aarch64-linux-android
+
+      - name: Verify NSS is available for Android
+        run: |
+          echo "NSS_DIR=$NSS_DIR"
+          ls dist/Release/lib/*.a
