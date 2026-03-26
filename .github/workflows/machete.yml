@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - this repo's own action, versioned by tag
+      - uses: mozilla/actions/rust@4e0ca4226b7d37bf4d40624d083d7e7a48ede1a1 # v1
         with:
           tools: cargo-hack,cargo-machete
           token: ${{ github.token }}

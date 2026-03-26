@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses]
+      - uses: mozilla/actions/rust@4e0ca4226b7d37bf4d40624d083d7e7a48ede1a1 # v1
         with:
           tools: cargo-semver-checks
           token: ${{ github.token }}
