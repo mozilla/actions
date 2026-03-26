@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - id: toolchains
-        uses: mozilla/actions/toolchains@a3e37c7f14fff58381d740e2cf1d26009d96846b # v1
+        uses: mozilla/actions/toolchains@299904c7edfc5ffa4a98a0db774199479f8a866f # v1
 
   clippy:
     name: cargo clippy
@@ -43,7 +43,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: mozilla/actions/rust@a3e37c7f14fff58381d740e2cf1d26009d96846b # v1
+      - uses: mozilla/actions/rust@299904c7edfc5ffa4a98a0db774199479f8a866f # v1
         with:
           version: ${{ matrix.rust-toolchain }}
           components: clippy
