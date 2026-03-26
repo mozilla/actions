@@ -1,0 +1,68 @@
+name: Find PR mutants
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
+  workflow_call:
+    inputs:
+      args:
+        description: Additional arguments to pass to cargo-mutants
+        default: ""
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  mutants:
+    name: Find PR mutants
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses]
+        with:
+          version: nightly
+          tools: cargo-mutants
+          token: ${{ github.token }}
+
+      - name: Generate diff
+        env:
+          BASE_REF: ${{ github.base_ref || github.event.merge_group.base_ref }}
+        run: |
+          BASE_REF="${BASE_REF#refs/heads/}"
+          git diff "origin/${BASE_REF}.." > pr.diff
+
+      - name: Find mutants
+        env:
+          EXTRA_ARGS: ${{ inputs.args }}
+        run: |
+          MUTANTS_ARGS="--no-shuffle --in-place -- --all-targets"
+          # Exit codes: 0=success, 1=build/test failure (fail workflow),
+          # 2=missed, 3=timeout, 4=unviable (suppress, report in summary).
+          # shellcheck disable=SC2086
+          (cargo mutants --in-diff pr.diff $MUTANTS_ARGS $EXTRA_ARGS 2>&1 \
+            || { ec=$?; [ $ec -ge 2 ] && [ $ec -le 4 ] && exit 0; exit $ec; }) | tee results.txt
+
+      - name: Post step summary
+        if: always()
+        run: |
+          {
+            echo "### Incremental Mutants"
+            echo "Mutants found in files changed by this PR."
+            echo "See https://mutants.rs/using-results.html for more information."
+            echo '```'
+            sed 's/\x1b\[[0-9;]*[mGKHF]//g' results.txt || true
+            echo '```'
+          } > "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
+        if: always()
+        with:
+          name: mutants.out
+          path: mutants.out
