@@ -56,6 +56,23 @@ jobs:
           $ACTIONLINT -color \
             -format '{{range $err := .}}::error file={{$err.Filepath}},line={{$err.Line}},col={{$err.Column}}::{{$err.Message}} [{{$err.Kind}}]{{end}}'
 
+  prettier:
+    name: Prettier
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - name: Check formatting
+        env:
+          # renovate: depName=prettier datasource=npm
+          PRETTIER_VERSION: "3.8.1"
+        run: npx --yes "prettier@${PRETTIER_VERSION}" --check '**/*.yml'
+
   zizmor:
     name: zizmor
     timeout-minutes: 5
