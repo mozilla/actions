@@ -49,7 +49,7 @@ jobs:
           # Commit and push the pin update if anything changed.
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git config user.name "github-actions[bot]"
-          git remote set-url origin "https://x-access-token:${PUSH_TOKEN}@github.com/$GITHUB_REPOSITORY"
+          git remote set-url origin "https://oauth2:${PUSH_TOKEN}@github.com/$GITHUB_REPOSITORY"
           if ! git diff --quiet; then
             git add .github/workflows/
             git commit -m "chore: update internal pins to $TAG"
