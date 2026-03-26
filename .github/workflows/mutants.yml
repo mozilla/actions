@@ -1,5 +1,5 @@
 name: Find mutants
-on:
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
   workflow_call:
     inputs:
       args:
@@ -10,13 +10,7 @@ on:
         description: Number of shards to split mutation testing across
         default: 64
         type: number
-  schedule:
-    - cron: "0 0 * * 0" # Weekly on Sunday at midnight UTC
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read

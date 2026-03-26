@@ -1,16 +1,7 @@
 name: Lint GitHub Actions workflows
-on:
-  pull_request:
-    paths:
-      - ".github/**"
-      - "*/action.yml"
-  merge_group:
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
   workflow_call:
   workflow_dispatch:
-
-concurrency:
-  group: ${{ github.workflow_ref }}-${{ github.ref }}
-  cancel-in-progress: true
 
 permissions:
   contents: read
