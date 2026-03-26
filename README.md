@@ -65,24 +65,37 @@ action will detect this automatically and use sccache for the NSS build without 
 
 ## Reusable Workflows
 
-Call these from a job in your workflow using `uses:`:
+Call these from a job in your workflow using `uses:`. Workflows that depend on
+NSS require callers to run `mozilla/actions/nss@v1` in a prior step.
 
 ```yaml
 jobs:
   deny:
     uses: mozilla/actions/.github/workflows/deny.yml@v1
-
   rustfmt:
     uses: mozilla/actions/.github/workflows/rustfmt.yml@v1
-
   machete:
     uses: mozilla/actions/.github/workflows/machete.yml@v1
-
   actionlint:
     uses: mozilla/actions/.github/workflows/actionlint.yml@v1
-
   dependency-review:
     uses: mozilla/actions/.github/workflows/dependency-review.yml@v1
+  clippy:
+    uses: mozilla/actions/.github/workflows/clippy.yml@v1
+    with:
+      exclude-features: gecko # optional
+  sanitize:
+    uses: mozilla/actions/.github/workflows/sanitize.yml@v1
+    with:
+      features: ci # optional
+  mutants-pr:
+    uses: mozilla/actions/.github/workflows/mutants-pr.yml@v1
+  mutants:
+    uses: mozilla/actions/.github/workflows/mutants.yml@v1
+  semver:
+    uses: mozilla/actions/.github/workflows/semver.yml@v1
+    with:
+      package: my-crate # optional; omit to check all packages
 ```
 
 ### `deny.yml` — cargo deny
@@ -114,6 +127,38 @@ composite action files. Triggers automatically on pull requests.
 
 Runs the [GitHub Dependency Review Action](https://github.com/actions/dependency-review-action)
 to surface known-vulnerable package versions introduced in a PR.
+
+### `clippy.yml` — Clippy
+
+Runs `cargo hack clippy --feature-powerset` across a matrix of OS (Linux,
+macOS, Windows) and toolchains (MSRV, stable, nightly), plus `cargo doc` with
+strict warnings. Accepts an `exclude-features` input for project-specific
+features to exclude from the powerset (e.g. `gecko`).
+
+### `sanitize.yml` — Sanitizers
+
+Runs tests with address, thread, and leak sanitizers on Linux and macOS using
+nightly Rust. Accepts a `features` input to enable project-specific Cargo
+features during testing. macOS leak sanitizer suppresses known system library
+leaks automatically.
+
+### `mutants-pr.yml` — PR mutation testing
+
+Runs [`cargo-mutants`](https://mutants.rs) on the diff introduced by a PR,
+checking that each mutation is caught by the test suite. Posts results as a
+job summary.
+
+### `mutants.yml` — Full mutation testing (scheduled)
+
+Runs `cargo-mutants` across the entire codebase in parallel shards
+(configurable via `shards` input). Designed for weekly scheduled runs. Merges
+shard results and posts a summary with missed/caught/timeout counts.
+
+### `semver.yml` — Semver compatibility
+
+Runs [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks)
+against the PR base branch to catch breaking API changes. Accepts a `package`
+input to check a specific crate (omit to check all packages).
 
 ## Versioning
 

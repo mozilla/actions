@@ -1,0 +1,65 @@
+name: Clippy
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
+  workflow_call:
+    inputs:
+      exclude-features:
+        description: Comma-separated features to exclude from the powerset (e.g. "gecko")
+        default: ""
+        type: string
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  toolchains:
+    name: Determine toolchains
+    timeout-minutes: 5
+    runs-on: ubuntu-24.04
+    outputs:
+      toolchains: ${{ steps.toolchains.outputs.toolchains }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - id: toolchains
+        uses: mozilla/actions/toolchains@v1 # zizmor: ignore[unpinned-uses]
+
+  clippy:
+    name: cargo clippy
+    needs: toolchains
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+        rust-toolchain: ${{ fromJSON(needs.toolchains.outputs.toolchains) }}
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses]
+        with:
+          version: ${{ matrix.rust-toolchain }}
+          components: clippy
+          tools: cargo-hack
+          token: ${{ github.token }}
+
+      - name: Run clippy
+        env:
+          EXCLUDE_FEATURES: ${{ inputs.exclude-features }}
+        run: |
+          EXCLUDE=""
+          [ -n "$EXCLUDE_FEATURES" ] && EXCLUDE="--exclude-features $EXCLUDE_FEATURES"
+          # shellcheck disable=SC2086
+          cargo hack clippy --feature-powerset --no-dev-deps $EXCLUDE -- -D warnings
+
+      - name: Check documentation
+        run: cargo doc --workspace --no-deps --document-private-items
+        env:
+          RUSTDOCFLAGS: "--deny rustdoc::broken_intra_doc_links --deny warnings"
