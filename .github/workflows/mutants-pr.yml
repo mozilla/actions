@@ -25,7 +25,7 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - uses: mozilla/actions/rust@4e0ca4226b7d37bf4d40624d083d7e7a48ede1a1 # v1
+      - uses: mozilla/actions/rust@a3e37c7f14fff58381d740e2cf1d26009d96846b # v1
         with:
           version: nightly
           tools: cargo-mutants
