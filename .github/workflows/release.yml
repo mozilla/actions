@@ -1,0 +1,37 @@
+name: Release
+on: # zizmor: ignore[concurrency-limits] - release events are inherently serialised
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Immutable release tag to promote (e.g. v1.0.1)
+        required: true
+        type: string
+
+permissions: {}
+
+jobs:
+  release:
+    name: Update major version tag
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write # Required to update the major version tag
+    steps:
+      - name: Update major version tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+        run: |
+          MAJOR="${TAG%%.*}"
+          echo "Promoting $TAG to $MAJOR"
+          SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.sha')
+          TYPE=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq '.object.type')
+          if [ "$TYPE" = "tag" ]; then
+            SHA=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$SHA" --jq '.object.sha')
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$MAJOR" \
+            -X PATCH --field sha="$SHA" --field force=true \
+          || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+            --field ref="refs/tags/$MAJOR" --field sha="$SHA"
