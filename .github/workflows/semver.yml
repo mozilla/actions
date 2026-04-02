@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: mozilla/actions/rust@b6b1031d2072eb8c2b181887cb5e194ebcc5caab # v1
+      - uses: mozilla/actions/rust@572de2040032587ae458a543d4d37e03375f9373 # v1
         with:
           tools: cargo-semver-checks
           token: ${{ github.token }}
