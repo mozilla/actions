@@ -42,7 +42,7 @@ jobs:
         env:
           EXTRA_ARGS: ${{ inputs.args }}
         run: |
-          MUTANTS_ARGS="--no-shuffle --in-place -- --all-targets"
+          MUTANTS_ARGS="--no-shuffle --in-place -- --all-targets --locked"
           # Exit codes: 0=success, 1=build/test failure (fail workflow),
           # 2=missed, 3=timeout, 4=unviable (suppress, report in summary).
           # shellcheck disable=SC2086
