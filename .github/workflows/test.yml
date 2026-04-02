@@ -15,6 +15,9 @@ permissions:
 jobs:
   actionlint:
     uses: ./.github/workflows/actionlint.yml
+    permissions:
+      contents: read
+      security-events: write
 
   dependency-review:
     uses: ./.github/workflows/dependency-review.yml
