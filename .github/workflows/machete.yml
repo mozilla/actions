@@ -19,7 +19,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: mozilla/actions/rust@299904c7edfc5ffa4a98a0db774199479f8a866f # v1
+      - uses: mozilla/actions/rust@b6b1031d2072eb8c2b181887cb5e194ebcc5caab # v1
         with:
           tools: cargo-hack,cargo-machete
           token: ${{ github.token }}
