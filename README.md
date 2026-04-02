@@ -79,7 +79,11 @@ jobs:
     uses: mozilla/actions/.github/workflows/machete.yml@v1
   actionlint:
     uses: mozilla/actions/.github/workflows/actionlint.yml@v1
+    permissions:
+      contents: read
+      security-events: write # Required for zizmor to upload SARIF results
   dependency-review:
+    if: github.event_name == 'pull_request'
     uses: mozilla/actions/.github/workflows/dependency-review.yml@v1
   clippy:
     uses: mozilla/actions/.github/workflows/clippy.yml@v1
