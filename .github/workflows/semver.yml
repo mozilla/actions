@@ -38,4 +38,4 @@ jobs:
           PACKAGE_ARG=""
           [ -n "$PACKAGE" ] && PACKAGE_ARG="-p $PACKAGE"
           # shellcheck disable=SC2086
-          cargo semver-checks --default-features --baseline-rev "origin/$BASE_REF" $PACKAGE_ARG
+          cargo semver-checks --locked --default-features --baseline-rev "origin/$BASE_REF" $PACKAGE_ARG
