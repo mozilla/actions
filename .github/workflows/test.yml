@@ -20,6 +20,7 @@ jobs:
       security-events: write
 
   dependency-review:
+    if: github.event_name == 'pull_request'
     uses: ./.github/workflows/dependency-review.yml
 
   test-rust:
