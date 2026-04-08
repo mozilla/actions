@@ -23,9 +23,9 @@ jobs:
         id: get_actionlint
         env:
           # renovate: depName=rhysd/actionlint datasource=github-releases
-          VERSION: "1.7.11"
+          VERSION: "1.7.12"
           # SHA-256 from https://github.com/rhysd/actionlint/releases/download/v1.7.11/actionlint_1.7.11_checksums.txt
-          SHA256: "900919a84f2229bac68ca9cd4103ea297abc35e9689ebb842c6e34a3d1b01b0a"
+          SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
         run: |
           archive="actionlint_${VERSION}_linux_amd64.tar.gz"
           curl --proto '=https' --tlsv1.2 -sSfL \
