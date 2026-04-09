@@ -17,7 +17,7 @@ jobs:
     uses: ./.github/workflows/actionlint.yml
     permissions:
       contents: read
-      security-events: write
+      security-events: write # Required to upload SARIF results to GitHub
 
   dependency-review:
     if: github.event_name == 'pull_request'
