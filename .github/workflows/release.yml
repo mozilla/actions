@@ -17,17 +17,11 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
-      contents: write # Required to commit pin updates and update the major version tag
+      contents: write # Required to update the major version tag
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-        with:
-          ref: main
-          persist-credentials: false
-
-      - name: Update internal pins and major version tag
+      - name: Update major version tag
         env:
           GH_TOKEN: ${{ github.token }}
-          PUSH_TOKEN: ${{ secrets.RENOVATE }} # zizmor: ignore[secrets-outside-env]
           TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: |
           MAJOR="${TAG%%.*}"
@@ -41,27 +35,10 @@ jobs:
           fi
           echo "Release SHA: $SHA"
 
-          # Update all mozilla/actions/* internal pins to the new SHA.
-          find .github/workflows -name "*.yml" -print0 | \
-            xargs -0 sed -i \
-              "s|mozilla/actions/\([^@]*\)@[a-f0-9]\{40\} # $MAJOR|mozilla/actions/\1@$SHA # $MAJOR|g"
-
-          # Commit and push the pin update if anything changed.
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git config user.name "github-actions[bot]"
-          git remote set-url origin "https://oauth2:${PUSH_TOKEN}@github.com/$GITHUB_REPOSITORY"
-          if ! git diff --quiet; then
-            git add .github/workflows/
-            git commit -m "chore: update internal pins to $TAG"
-            git push origin main || { git pull --rebase origin main && git push origin main; }
-          fi
-
-          # Point both the immutable tag and the major version tag at HEAD
-          # (pin update commit, or original release commit if nothing changed).
-          FINAL_SHA=$(git rev-parse HEAD)
+          # Point both the immutable tag and the major version tag at the release commit.
           for REF in "$TAG" "$MAJOR"; do
             gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$REF" \
-              -X PATCH --field sha="$FINAL_SHA" --field force=true \
+              -X PATCH --field sha="$SHA" --field force=true \
             || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              --field ref="refs/tags/$REF" --field sha="$FINAL_SHA"
+              --field ref="refs/tags/$REF" --field sha="$SHA"
           done
