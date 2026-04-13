@@ -86,11 +86,19 @@ jobs:
           (cargo mutants --shard "$SHARD" --sharding round-robin --timeout "$TIMEOUT" $MUTANTS_ARGS $EXTRA_ARGS 2>&1 \
             || { ec=$?; [ $ec -ge 2 ] && [ $ec -le 4 ] && exit 0; exit $ec; }) | tee results.txt
 
+      - name: Stage shard output
+        if: always()
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          mkdir -p "staged/$SHARD"
+          [ -d mutants.out ] && cp -r mutants.out/. "staged/$SHARD/"
+
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: always()
         with:
           name: mutants.out-${{ matrix.shard }}
-          path: mutants.out
+          path: staged
           retention-days: 1
 
   results:
@@ -107,17 +115,13 @@ jobs:
         with:
           pattern: mutants.out-*
           path: shards
+          merge-multiple: true
 
       - name: Merge shard results
         run: |
           mkdir -p mutants.out
-          for dir in shards/mutants.out-*; do
-            shard="${dir##*-}"
-            mv "$dir" "mutants.out/shard-$shard"
-          done
           for category in caught missed timeout unviable; do
-            cat mutants.out/shard-*/"$category.txt" 2>/dev/null | sort -u > "mutants.out/$category.txt" || true
-            rm -f mutants.out/shard-*/"$category.txt"
+            cat shards/*/"$category.txt" 2>/dev/null | sort -u > "mutants.out/$category.txt" || true
           done
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
