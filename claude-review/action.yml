@@ -36,7 +36,7 @@ runs:
         EXTRA_PROMPT: ${{ inputs.prompt }}
       run: |
         # Use a random delimiter to prevent injection via the prompt input.
-        DELIM="EOF_$(tr -dc 'a-f0-9' < /dev/urandom | head -c 16)"
+        DELIM="EOF_$(head -c 8 /dev/urandom | xxd -p)"
         {
           echo "content<<$DELIM"
           cat "$ACTION_PATH/prompt.md"
