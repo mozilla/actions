@@ -12,7 +12,7 @@ permissions:
   contents: read
 jobs:
   claude-review-trusted:
-    name: Claude Code Review (Trusted)
+    name: Trusted User
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot' &&
@@ -32,7 +32,7 @@ jobs:
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
   claude-review-untrusted:
-    name: Claude Code Review (Untrusted)
+    name: Untrusted User
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot' &&
