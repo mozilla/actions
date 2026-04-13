@@ -56,8 +56,9 @@ jobs:
         run: |
           EXCLUDE=""
           [ -n "$EXCLUDE_FEATURES" ] && EXCLUDE="--exclude-features $EXCLUDE_FEATURES"
+          # We can't do `--locked` here due to also using `--no-dev-deps`.
           # shellcheck disable=SC2086
-          cargo hack clippy --locked --feature-powerset --no-dev-deps $EXCLUDE -- -D warnings
+          cargo hack clippy --feature-powerset --no-dev-deps $EXCLUDE -- -D warnings
 
       - name: Check documentation
         run: cargo doc --locked --workspace --no-deps --document-private-items
