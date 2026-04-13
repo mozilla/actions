@@ -43,63 +43,25 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to perform an AI-assisted code review on a pull
-request. Posts inline comments and a PR-level summary via the GitHub review API.
+request. Posts inline comments and a PR-level summary via the GitHub review API. Only runs
+for pull requests whose author is an `OWNER`, `MEMBER`, or `COLLABORATOR` of the repository.
 
 > [!NOTE]
-> Requires an `ANTHROPIC_API_KEY` repository secret. For external (fork) PRs, gate the job behind
-> a GitHub [environment](https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment)
-> with required reviewers to prevent unauthorized API usage.
+> Requires an `ANTHROPIC_API_KEY` repository secret.
+
+The easiest way to use this is to copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml)
+into your repository — it includes the trigger and permission gating. Add a
+[concurrency group](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/control-the-concurrency-of-workflows-and-jobs)
+and an `ANTHROPIC_API_KEY` secret and you're done.
+
+Alternatively, call it as a [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows)
+using `secrets: inherit`. Or use the composite action directly to customize model, budget, or prompt:
 
 ```yaml
-# .github/workflows/claude.yml
-name: Claude Code Review
-on:
-  # Use pull_request_target to allow secrets access for fork PRs.
-  # CI only runs after manual approval for <your-repo>, for non-members of the repo.
-  pull_request_target: # zizmor: ignore[dangerous-triggers] See rationale above.
-    branches: ["main"]
-    types: [opened, synchronize, ready_for_review, reopened]
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
-permissions:
-  contents: read
-jobs:
-  claude-review-trusted:
-    name: Claude Code Review (Trusted)
-    if: >-
-      !github.event.pull_request.draft &&
-      github.event.pull_request.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-               github.event.pull_request.author_association)
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write # Required to post review comments.
-      issues: read # Required to read issue context via MCP tools.
-      actions: read # Required to read workflow run context via MCP tools.
-    steps:
-      - uses: mozilla/actions/claude-review@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
-  claude-review-untrusted:
-    name: Claude Code Review (Untrusted)
-    if: >-
-      !github.event.pull_request.draft &&
-      github.event.pull_request.user.type != 'Bot' &&
-      !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-                github.event.pull_request.author_association)
-    environment: claude-review # Requires manual approval for external contributors.
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-      pull-requests: write # Required to post review comments.
-      issues: read # Required to read issue context via MCP tools.
-      actions: read # Required to read workflow run context via MCP tools.
-    steps:
-      - uses: mozilla/actions/claude-review@v1
-        with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+- uses: mozilla/actions/claude-review@v1
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+    prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
 | Input               | Default             | Description                                     |
@@ -141,6 +103,14 @@ NSS require callers to run `mozilla/actions/nss@v1` in a prior step.
 
 ```yaml
 jobs:
+  claude-review:
+    uses: mozilla/actions/.github/workflows/claude-review.yml@v1
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
+      actions: read
+    secrets: inherit
   deny:
     uses: mozilla/actions/.github/workflows/deny.yml@v1
   rustfmt:
@@ -172,6 +142,14 @@ jobs:
     with:
       package: my-crate # optional; omit to check all packages
 ```
+
+### `claude-review.yml` — Claude Code Review
+
+Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
+self-contained workflow. Handles the `pull_request_target` trigger and permission gating
+(`OWNER`/`MEMBER`/`COLLABORATOR` only). Concurrency is the caller's responsibility. Can be
+copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
+To customize model, budget, or prompt, use the composite action directly.
 
 ### `deny.yml` — cargo deny
 
