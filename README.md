@@ -74,6 +74,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: read
+      actions: read
     steps:
       - uses: mozilla/actions/claude-review@v1
         with:
@@ -90,6 +92,8 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
+      issues: read
+      actions: read
     steps:
       - uses: mozilla/actions/claude-review@v1
         with:
@@ -103,7 +107,6 @@ jobs:
 | `fallback_model` | `claude-sonnet-4-6` | Fallback model |
 | `budget` | `5.00` | Max spend per review in USD |
 | `prompt` | `""` | Additional project-specific review instructions |
-| `instruction_files` | `.github/copilot-instructions.md` | Space-separated files to restore from the base branch (prevents prompt injection via PR changes) |
 
 ### `nss` — Install Mozilla NSS
 
