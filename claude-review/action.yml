@@ -23,12 +23,6 @@ inputs:
       review prompt. Use this to add domain-specific focus areas (e.g., protocol
       compliance, unsafe FFI rules) relevant to your project.
     default: ""
-  instruction_files:
-    description: >
-      Space-separated list of files to restore from the base branch after
-      checking out the PR head. These files are trusted versions from the base
-      branch, preventing PR authors from manipulating review instructions.
-    default: ".github/copilot-instructions.md"
 
 runs:
   using: composite
@@ -41,8 +35,10 @@ runs:
         ACTION_PATH: ${{ github.action_path }}
         EXTRA_PROMPT: ${{ inputs.prompt }}
       run: |
+        # Use a random delimiter to prevent injection via the prompt input.
+        DELIM="EOF_$(tr -dc 'a-f0-9' < /dev/urandom | head -c 16)"
         {
-          echo "content<<EOF"
+          echo "content<<$DELIM"
           cat "$ACTION_PATH/prompt.md"
           if [[ -n "$EXTRA_PROMPT" ]]; then
             echo ""
@@ -50,7 +46,7 @@ runs:
             echo ""
             echo "$EXTRA_PROMPT"
           fi
-          echo "EOF"
+          echo "$DELIM"
         } >> "$GITHUB_OUTPUT"
 
     # With pull_request_target, checkout defaults to the base branch.
@@ -67,13 +63,23 @@ runs:
       env:
         BASE_REPO: ${{ github.repository }}
         BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        INSTRUCTION_FILES: ${{ inputs.instruction_files }}
+        FETCH_TOKEN: ${{ github.token }}
       run: |
+        # Write credentials into the local git config rather than the command line
+        # to avoid exposure in process listings. Unset on exit so the token isn't
+        # left in .git/config if the fetch fails.
+        AUTH_HEADER="$(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 | tr -d '\n')"
+        git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic $AUTH_HEADER"
+        trap 'git config --local --unset "http.https://github.com/.extraheader" 2>/dev/null || true' EXIT
         git fetch --depth=1 "https://github.com/$BASE_REPO" "$BASE_SHA"
-        # Overwrite instruction files with the trusted base-branch versions.
-        for file in $INSTRUCTION_FILES; do
-          git checkout FETCH_HEAD -- "$file" 2>/dev/null || true
-        done
+        # Restore .github/copilot-instructions.md from the trusted base branch version.
+        # If it doesn't exist on the base branch, remove any PR version to prevent
+        # a newly added file from influencing the review.
+        if git cat-file -e "FETCH_HEAD:.github/copilot-instructions.md" 2>/dev/null; then
+          git checkout FETCH_HEAD -- .github/copilot-instructions.md
+        else
+          rm -f -- .github/copilot-instructions.md
+        fi
 
     - name: Run Claude Code Review
       id: claude
@@ -84,7 +90,7 @@ runs:
         github_token: ${{ github.token }}
         # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
         # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options
-        claude_args: >-
+        claude_args: |
           --model ${{ inputs.model }}
           --fallback-model ${{ inputs.fallback_model }}
           --max-budget-usd ${{ inputs.budget }}

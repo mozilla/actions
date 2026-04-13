@@ -1,15 +1,15 @@
 Perform a comprehensive code review geared towards expert developers; be very concise and constructive.
-If the file exists, also consider the additional context in `.github/copilot-instructions.md`.
+If the file exists, also consider the additional project context in `.github/copilot-instructions.md`.
 These are the main focus areas for your review:
 
 1. **Code Quality**
    - Clean code principles and best practices
    - DRY (Don't Repeat Yourself) adherence, including refactoring opportunities
-     and usage of existing helper crate functionality and patterns to reduce boilerplate code
+     and usage of existing utility functions, libraries, and patterns to reduce boilerplate code
    - Idiomatic usage of all programming languages
    - Proper error and edge case handling
    - Code readability and maintainability
-   - Flag changes to public APIs in shared crates that may break downstream consumers or browser integration
+   - Flag changes to public APIs that may break downstream consumers
 
 2. **Security**
    - Scrutinize any `unsafe` blocks, especially FFI boundaries — verify soundness,
