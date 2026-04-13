@@ -23,7 +23,7 @@ jobs:
         with:
           persist-credentials: false
       - id: toolchains
-        uses: mozilla/actions/toolchains@572de2040032587ae458a543d4d37e03375f9373 # v1
+        uses: mozilla/actions/toolchains@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
 
   clippy:
     name: cargo clippy
@@ -43,7 +43,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: mozilla/actions/rust@572de2040032587ae458a543d4d37e03375f9373 # v1
+      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
         with:
           version: ${{ matrix.rust-toolchain }}
           components: clippy
