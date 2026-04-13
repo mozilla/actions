@@ -54,7 +54,9 @@ request. Posts inline comments and a PR-level summary via the GitHub review API.
 # .github/workflows/claude.yml
 name: Claude Code Review
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] - prompt loaded from action, not PR
+  # Use pull_request_target to allow secrets access for fork PRs.
+  # CI only runs after manual approval for <your-repo>, for non-members of the repo.
+  pull_request_target: # zizmor: ignore[dangerous-triggers] See rationale above.
     branches: ["main"]
     types: [opened, synchronize, ready_for_review, reopened]
 concurrency:
@@ -64,7 +66,7 @@ permissions:
   contents: read
 jobs:
   claude-review-trusted:
-    name: Claude Code Review
+    name: Claude Code Review (Trusted)
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot' &&
@@ -73,40 +75,40 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      pull-requests: write
-      issues: read
-      actions: read
+      pull-requests: write # Required to post review comments.
+      issues: read # Required to read issue context via MCP tools.
+      actions: read # Required to read workflow run context via MCP tools.
     steps:
       - uses: mozilla/actions/claude-review@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
   claude-review-untrusted:
-    name: Claude Code Review
+    name: Claude Code Review (Untrusted)
     if: >-
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot' &&
       !contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
                 github.event.pull_request.author_association)
-    environment: claude-review  # Requires manual approval for external contributors.
+    environment: claude-review # Requires manual approval for external contributors.
     runs-on: ubuntu-24.04
     permissions:
       contents: read
-      pull-requests: write
-      issues: read
-      actions: read
+      pull-requests: write # Required to post review comments.
+      issues: read # Required to read issue context via MCP tools.
+      actions: read # Required to read workflow run context via MCP tools.
     steps:
       - uses: mozilla/actions/claude-review@v1
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
 ```
 
-| Input | Default | Description |
-|---|---|---|
-| `anthropic_api_key` | *(required)* | Anthropic API key |
-| `model` | `claude-opus-4-6` | Primary Claude model |
-| `fallback_model` | `claude-sonnet-4-6` | Fallback model |
-| `budget` | `5.00` | Max spend per review in USD |
-| `prompt` | `""` | Additional project-specific review instructions |
+| Input               | Default             | Description                                     |
+| ------------------- | ------------------- | ----------------------------------------------- |
+| `anthropic_api_key` | _(required)_        | Anthropic API key                               |
+| `model`             | `claude-opus-4-6`   | Primary Claude model                            |
+| `fallback_model`    | `claude-sonnet-4-6` | Fallback model                                  |
+| `budget`            | `5.00`              | Max spend per review in USD                     |
+| `prompt`            | `""`                | Additional project-specific review instructions |
 
 ### `nss` — Install Mozilla NSS
 
