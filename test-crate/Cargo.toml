@@ -1,0 +1,16 @@
+[package]
+name = "test-crate"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70.0"
+publish = false
+license = "MIT OR Apache-2.0"
+description = "Minimal test crate for exercising mozilla-actions CI workflows"
+
+[features]
+hashing = ["dep:crc32fast"]
+encoding = ["dep:base64"]
+
+[dependencies]
+crc32fast = { version = "1", optional = true }
+base64 = { version = "0.21", optional = true }
