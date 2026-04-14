@@ -92,7 +92,7 @@ jobs:
           SHARD: ${{ matrix.shard }}
         run: |
           mkdir -p "staged/$SHARD"
-          [ -d mutants.out ] && cp -r mutants.out/. "staged/$SHARD/"
+          if [ -d mutants.out ]; then cp -r mutants.out/. "staged/$SHARD/"; fi
 
       - uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7.0.0
         if: always()

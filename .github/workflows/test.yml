@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/dependency-review.yml
 
   test-rust:
-    name: Test rust action
+    name: Test Rust action
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -85,7 +85,7 @@ jobs:
           "
 
   test-nss:
-    name: Test nss action
+    name: Test NSS action
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -135,7 +135,7 @@ jobs:
       args: "--features hashing,encoding"
 
   test-nss-android:
-    name: Test nss action (Android)
+    name: Test NSS action (Android)
     timeout-minutes: 60
     runs-on: ubuntu-24.04
     defaults:
