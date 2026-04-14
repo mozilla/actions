@@ -166,6 +166,7 @@ jobs:
         with:
           minimum-version: "3.90"
           target: aarch64-linux-android
+          token: ${{ github.token }}
 
       - name: Verify NSS is available for Android
         run: |
