@@ -1,0 +1,31 @@
+name: Claude Code Review
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] Only runs for repo members/collaborators.
+    types: [opened, synchronize, ready_for_review, reopened]
+  workflow_call: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility.
+    secrets:
+      ANTHROPIC_API_KEY:
+        description: Anthropic API key.
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  claude-review:
+    name: Claude Code Review
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.type != 'Bot' &&
+      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
+               github.event.pull_request.author_association)
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write # Required to post review comments.
+      issues: read # Required to read issue context via MCP tools.
+      actions: read # Required to read workflow run context via MCP tools.
+    steps:
+      - uses: mozilla/actions/claude-review@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
