@@ -1,0 +1,37 @@
+# Fix CPU architecture detection in NSPR configure on Windows ARM64.
+#
+# NSPR's configure detects CPU_ARCH via `uname -m`.  On Windows ARM64
+# runners, Git Bash's uname returns "x86_64" because the shell process runs
+# under x86_64 emulation.  Without correction, configure's x86_64 branch
+# runs without USE_64 set, emitting -D_X86_=1 and -arch:IA32 — flags that
+# cause compilation errors on the ARM64 MSVC toolchain.
+#
+# Setting CPU_ARCH=aarch64 and USE_64=1 directly forces the correct branch:
+#   - USE_64=1 causes the x86_64 path to emit -D_AMD64_=1 instead of _X86_,
+#     giving _winnt.cfg the 64-bit branch (which our other patch extends to
+#     cover _M_ARM64), and avoiding the x86-only ntmisc.c inline asm blocks.
+#
+# Both WINNT and CYGWIN/MSYS uname calls are patched since either shell
+# environment may be active depending on the runner configuration.
+#
+# Removable once NSPR configure detects ARM64 Windows natively.
+--- a/nspr/configure
++++ b/nspr/configure
+@@ -6729,7 +6729,7 @@
+         OS_MINOR_RELEASE=0
+     fi
+     OS_RELEASE="${OS_RELEASE}.${OS_MINOR_RELEASE}"
+-    CPU_ARCH=`uname -m`
++    CPU_ARCH=aarch64; USE_64=1
+     #
+     # MKS's uname -m returns "586" on a Pentium machine.
+     #
+@@ -6748,7 +6748,7 @@
+ #
+     OS_RELEASE=`expr $OS_ARCH : '.*NT-\(.*\)'`
+     OS_ARCH=WINNT
+-    CPU_ARCH=`uname -m`
++    CPU_ARCH=aarch64; USE_64=1
+     #
+     # Cygwin's uname -m returns "i686" on a Pentium Pro machine.
+     #

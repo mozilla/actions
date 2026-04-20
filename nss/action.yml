@@ -317,20 +317,6 @@ runs:
               patch -p1 < "$p"
             done
 
-            # NSPR's Makefile tries to compile a resource file (nspr.rc) via rc.exe,
-            # which fails because rc.exe's preprocessor cannot parse ARM64-specific
-            # constructs in NSPR's headers.  Not needed for static builds.
-            # TODO: Remove once NSPR's Makefile handles ARM64 resource compilation.
-            sed -i'' 's/^RES=.*/RES=/' nspr/pr/src/Makefile.in
-
-            # NSPR's configure detects CPU_ARCH via `uname -m`.  On Windows ARM64
-            # runners the shell is x64-emulated, so uname returns x86_64.  Without
-            # correction, configure's i*86|x86_64 case runs without USE_64, emitting
-            # -D_X86_=1 and -arch:IA32.  Setting USE_64=1 forces it to emit
-            # -D_AMD64_=1, which _winnt.cfg's ARM64 branch then also covers.
-            # TODO: Remove once NSPR configure detects ARM64 Windows natively.
-            sed -i'' 's/CPU_ARCH=`uname -m`/CPU_ARCH=aarch64; USE_64=1/g' nspr/configure
-
             # coreconf/msvc.sh only handles ia32 and x64; setting VSPATH bypasses
             # its toolchain discovery and uses the environment set by ilammy/msvc-dev-cmd.
             # TODO: Remove once NSS msvc.sh supports ARM64.
