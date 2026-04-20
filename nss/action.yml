@@ -192,15 +192,18 @@ runs:
     - name: Install build dependencies (Windows)
       shell: bash
       if: ${{ runner.os == 'Windows' && steps.check_build.outputs.build_nss }}
-      run: |
+      run: | # zizmor: ignore[github-env]
         # shellcheck disable=SC2028
         {
           echo C:/msys64/usr/bin
           echo C:/msys64/mingw64/bin
         } >> "$GITHUB_PATH"
-        curl -o "$HOME/bin/nsinstall.py" -sSf https://raw.githubusercontent.com/mozilla-firefox/firefox/refs/heads/main/config/nsinstall.py
+        mkdir -p "$HOME/bin"
+        # renovate: depName=firefox datasource=custom.firefox versioning=loose
+        curl -o "$HOME/bin/nsinstall.py" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_149_0_2_RELEASE/config/nsinstall.py
         echo "#! /usr/bin/env python3" | cat - "$HOME/bin/nsinstall.py" > "$HOME/bin/nsinstall"
         chmod +x "$HOME/bin/nsinstall"
+        echo "$HOME/bin" >> "$GITHUB_PATH"
         echo "gyp-next>=0.18.1" > req.txt
         python3 -m pip install -r req.txt
 
@@ -209,6 +212,8 @@ runs:
       uses: ilammy/msvc-dev-cmd@v1 # zizmor: ignore[unpinned-uses]
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "ilammy/msvc-dev-cmd@v1*"
       # uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'amd64' }}
 
     - name: Set up build environment (Windows)
       shell: bash

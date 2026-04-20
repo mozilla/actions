@@ -16,6 +16,12 @@
       "transformTemplates": [
         "{\"releases\": tags[$match(tag, /^NSPR_\\d+_\\d+(_\\d+)?_RTM$/)].{\"version\": $join($split($replace($replace(tag, \"NSPR_\", \"\"), \"_RTM\", \"\"), \"_\"), \".\")}}"
       ]
+    },
+    "firefox": {
+      "defaultRegistryUrlTemplate": "https://hg-edge.mozilla.org/releases/mozilla-release/json-tags",
+      "transformTemplates": [
+        "{\"releases\": tags[$match(tag, /^FIREFOX_\\d+_\\d+(_\\d+)?_RELEASE$/)].{\"version\": tag}}"
+      ]
     }
   },
   "customManagers": [
@@ -31,7 +37,8 @@
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION: \"(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION=\"v(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)"
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[^\\n]+/raw-file/(?<currentValue>FIREFOX_[^/]+)/[^\\n]+"
       ]
     }
   ],
