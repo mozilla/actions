@@ -311,10 +311,8 @@ runs:
           NSS_EXTRA=""
           if [ "$RUNNER_OS" == "Windows" ] && [ "$RUNNER_ARCH" == "ARM64" ]; then
             # Apply patches to NSPR and NSS for Windows ARM64 MSVC support.
-            # Apply patches to NSPR and NSS for Windows ARM64 MSVC support.
             # Each patch file can be removed individually as upstream adds support,
             # except nss-arm64-gyp-and-aes.patch which bundles two coupled changes.
-            # as NSPR/NSS add native ARM64 support upstream.
             for p in "$GITHUB_ACTION_PATH/patches/"*.patch; do
               patch -p1 < "$p"
             done
