@@ -24,7 +24,7 @@ jobs:
     uses: ./.github/workflows/dependency-review.yml
 
   test-rust:
-    name: Test rust action
+    name: Test Rust action
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -64,22 +64,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Create test Cargo.toml
-        run: |
-          mkdir -p /tmp/test-crate/src
-          cat > /tmp/test-crate/Cargo.toml << 'EOF'
-          [package]
-          name = "test-crate"
-          version = "0.1.0"
-          rust-version = "1.70.0"
-          edition = "2021"
-          EOF
-          touch /tmp/test-crate/src/lib.rs
-
       - uses: ./toolchains
         id: toolchains
         with:
-          working-directory: /tmp/test-crate
+          working-directory: test-crate
 
       - name: Verify output
         env:
@@ -97,7 +85,7 @@ jobs:
           "
 
   test-nss:
-    name: Test nss action
+    name: Test NSS action
     timeout-minutes: 30
     strategy:
       fail-fast: false
@@ -125,8 +113,29 @@ jobs:
             echo "Using system NSS: $(pkg-config --modversion nss)"
           fi
 
+  clippy:
+    uses: ./.github/workflows/clippy.yml
+
+  rustfmt:
+    uses: ./.github/workflows/rustfmt.yml
+
+  deny:
+    uses: ./.github/workflows/deny.yml
+
+  machete:
+    uses: ./.github/workflows/machete.yml
+
+  sanitize:
+    uses: ./.github/workflows/sanitize.yml
+
+  mutants:
+    uses: ./.github/workflows/mutants.yml
+    with:
+      shards: 1
+      args: "--features hashing,encoding"
+
   test-nss-android:
-    name: Test nss action (Android)
+    name: Test NSS action (Android)
     timeout-minutes: 60
     runs-on: ubuntu-24.04
     defaults:
@@ -142,7 +151,7 @@ jobs:
           distribution: zulu
           java-version: 23
 
-      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3.2.2
+      - uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
         with:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
@@ -157,6 +166,7 @@ jobs:
         with:
           minimum-version: "3.90"
           target: aarch64-linux-android
+          token: ${{ github.token }}
 
       - name: Verify NSS is available for Android
         run: |
