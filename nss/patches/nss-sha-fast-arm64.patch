@@ -1,0 +1,18 @@
+# Exclude _M_ARM64 (MSVC ARM64) from the 64-bit SHA_HW_t typedef.
+#
+# sha_fast.h defines SHA_HW_t as PRUint64 on 64-bit platforms, except
+# __aarch64__ (GCC/Clang ARM64).  The exclusion exists because the ARM HW
+# SHA-1 path (sha1-armv8.c) loads hash state with vld1q_u32, expecting four
+# contiguous 32-bit values.  If SHA_HW_t were PRUint64 the array would have
+# 8-byte stride and vld1q_u32 would load {A_lo, A_hi, B_lo, B_hi} instead of
+# {A, B, C, D}, corrupting state.
+#
+# MSVC ARM64 uses _M_ARM64, not __aarch64__, so it must be excluded too.
+#
+# Removable once NSS adds _M_ARM64 to the IS_64 exclusion upstream.
+--- a/nss/lib/freebl/sha_fast.h
++++ b/nss/lib/freebl/sha_fast.h
+@@ -13,7 +13,7 @@
+-#if defined(IS_64) && !defined(__sparc) && !defined(__aarch64__)
++#if defined(IS_64) && !defined(__sparc) && !defined(__aarch64__) && !defined(_M_ARM64)
+ typedef PRUint64 SHA_HW_t;

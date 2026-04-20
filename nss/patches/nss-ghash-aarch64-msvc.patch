@@ -1,0 +1,57 @@
+# Enable GHASH-AArch64 code path under MSVC ARM64.
+#
+# ghash-aarch64.c guards its body with __aarch64__ && (clang||gcc).  MSVC
+# ARM64 defines _M_ARM64 instead of __aarch64__ and supports the same
+# poly64x2_t PMULL intrinsics.
+#
+# Three changes:
+#   1. Extend the top-level guard to match MSVC ARM64.
+#   2. Add a __builtin_bswap64 compat: MSVC provides _byteswap_uint64 from
+#      <intrin.h> instead.
+#   3. Remove the (poly64_t) C-style casts on vget_low_p64 results.  GCC/Clang
+#      vmull_p64 expects poly64_t scalars; MSVC expects poly64x1_t vectors.
+#      vget_low_p64 returns poly64x1_t, and MSVC rejects C-style casts to union
+#      types.  Dropping the cast works with both compilers.
+#
+# Removable once NSS extends ghash-aarch64.c to MSVC upstream.
+--- a/nss/lib/freebl/ghash-aarch64.c
++++ b/nss/lib/freebl/ghash-aarch64.c
+@@ -12,7 +12,13 @@
+ /* old gcc doesn't support some poly64x2_t intrinsic */
+-#if defined(__aarch64__) && defined(IS_LITTLE_ENDIAN) && \
+-    (defined(__clang__) || defined(__GNUC__) && __GNUC__ > 6)
++#if (defined(__aarch64__) || defined(_M_ARM64)) && defined(IS_LITTLE_ENDIAN) && \
++    (defined(__clang__) || (defined(__GNUC__) && __GNUC__ > 6) || defined(_MSC_VER))
+
+ #include <arm_neon.h>
+
++#ifdef _MSC_VER
++#include <intrin.h>
++#define __builtin_bswap64(x) _byteswap_uint64(x)
++#endif
++
+ PRBool
+@@ -50,14 +56,14 @@
+         /* Do binary mult ghash->X = Ci * ghash->H. */
+         z_low = vreinterpretq_u8_p128(
+-            vmull_p64((poly64_t)vget_low_p64(vreinterpretq_p64_u64(ci)),
+-                      (poly64_t)vget_low_p64(vreinterpretq_p64_u64(h))));
++            vmull_p64(vget_low_p64(vreinterpretq_p64_u64(ci)),
++                      vget_low_p64(vreinterpretq_p64_u64(h))));
+         z_high = vreinterpretq_u8_p128(
+             vmull_high_p64(vreinterpretq_p64_u64(ci), vreinterpretq_p64_u64(h)));
+         t1 = vreinterpretq_p64_u8(
+             vextq_u8(vreinterpretq_u8_u64(h), vreinterpretq_u8_u64(h), 8));
+         t_low = vreinterpretq_u8_p128(
+-            vmull_p64((poly64_t)vget_low_p64(vreinterpretq_p64_u64(ci)),
+-                      (poly64_t)vget_low_p64(t1)));
++            vmull_p64(vget_low_p64(vreinterpretq_p64_u64(ci)),
++                      vget_low_p64(t1)));
+         t_high = vreinterpretq_u8_p128(vmull_high_p64(vreinterpretq_p64_u64(ci), t1));
+@@ -67,8 +73,8 @@
+                        vreinterpretq_u64_p128(
+-                           vmull_p64((poly64_t)vget_low_p64(vreinterpretq_p64_u8(z_high)),
+-                                     (poly64_t)vget_low_p64(p))));
++                           vmull_p64(vget_low_p64(vreinterpretq_p64_u8(z_high)),
++                                     vget_low_p64(p))));
+     }

@@ -1,0 +1,28 @@
+# Extend __aarch64__ guards in blinit.c to cover MSVC ARM64 (_M_ARM64).
+#
+# blinit.c uses __aarch64__ in three places where MSVC ARM64 needs to be
+# included:
+#   1. The _WIN64 + __aarch64__ guard for including <windows.h> (needed for
+#      IsProcessorFeaturePresent used inside CheckARMSupport on Windows).
+#   2. The standalone #if defined(__aarch64__) that gates the ARM64-specific
+#      CheckARMSupport function definition.
+#   3. The FreeblInit() dispatch that calls CheckARMSupport().
+#
+# Removable once NSS adds _M_ARM64 checks to blinit.c upstream.
+--- a/nss/lib/freebl/blinit.c
++++ b/nss/lib/freebl/blinit.c
+@@ -20,7 +20,7 @@
+-#if defined(_WIN64) && defined(__aarch64__)
++#if defined(_WIN64) && (defined(__aarch64__) || defined(_M_ARM64))
+ #include <windows.h>
+ #endif
+@@ -189,7 +189,7 @@
+-#if defined(__aarch64__)
++#if defined(__aarch64__) || defined(_M_ARM64)
+
+ #if defined(__linux__)
+@@ -560,7 +560,7 @@
+     CheckX86CPUSupport();
+-#elif (defined(__aarch64__) || defined(__arm__))
++#elif (defined(__aarch64__) || defined(__arm__) || defined(_M_ARM64))
+     CheckARMSupport();
