@@ -200,11 +200,11 @@ runs:
           echo C:/msys64/usr/bin
           # mingw64/bin provides x86_64 MinGW toolchain binaries; not used on ARM64
           # where the build uses MSVC exclusively.
-          [ "$RUNNER_ARCH" != "ARM64" ] && echo C:/msys64/mingw64/bin
+          [ "$RUNNER_ARCH" != "ARM64" ] && echo C:/msys64/mingw64/bin || true
         } >> "$GITHUB_PATH"
         mkdir -p "$HOME/bin"
         # renovate: depName=firefox datasource=custom.firefox versioning=loose
-        curl -o "$HOME/bin/nsinstall.py" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_149_0_2_RELEASE/config/nsinstall.py
+        curl --proto '=https' --tlsv1.2 -o "$HOME/bin/nsinstall.py" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_149_0_2_RELEASE/config/nsinstall.py
         echo "f88df5591ee50d6e86625efd6e5f9c7b0dd4cba61e27ab533b1990115e100caf  $HOME/bin/nsinstall.py" | sha256sum -c -
         echo "#! /usr/bin/env python3" | cat - "$HOME/bin/nsinstall.py" > "$HOME/bin/nsinstall"
         chmod +x "$HOME/bin/nsinstall"

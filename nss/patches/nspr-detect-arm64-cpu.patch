@@ -22,7 +22,7 @@
      fi
      OS_RELEASE="${OS_RELEASE}.${OS_MINOR_RELEASE}"
 -    CPU_ARCH=`uname -m`
-+    CPU_ARCH=aarch64; USE_64=1
++    CPU_ARCH=aarch64; USE_64=1  # ARM64 Windows only; see nss/action.yml
      #
      # MKS's uname -m returns "586" on a Pentium machine.
      #
@@ -31,7 +31,7 @@
      OS_RELEASE=`expr $OS_ARCH : '.*NT-\(.*\)'`
      OS_ARCH=WINNT
 -    CPU_ARCH=`uname -m`
-+    CPU_ARCH=aarch64; USE_64=1
++    CPU_ARCH=aarch64; USE_64=1  # ARM64 Windows only; see nss/action.yml
      #
      # Cygwin's uname -m returns "i686" on a Pentium Pro machine.
      #
