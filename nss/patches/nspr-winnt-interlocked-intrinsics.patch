@@ -1,37 +1,28 @@
-# Replace Win32 Interlocked* exports with _Interlocked* compiler intrinsics.
+# Redirect Win32 Interlocked* exports to _Interlocked* compiler intrinsics.
 #
 # On ARM64 Windows, kernel32.lib does not export the Win32 Interlocked*
 # functions as callable symbols; they are only available as compiler
-# intrinsics (prefixed with _).  This patch:
+# intrinsics (underscore-prefixed).  Placing redirects immediately after
+# <windows.h> rewrites every call site in NSPR via the preprocessor:
 #
-#   1. Adds #define InterlockedCompareExchange _InterlockedCompareExchange
-#      immediately after <windows.h> so every call site (ntio.c, prmwait.c,
-#      etc.) is rewritten by the preprocessor.
-#
-#   2. Replaces the _MD_ATOMIC_* macro bodies with their intrinsic variants.
-#      _MD_ATOMIC_SET uses InterlockedExchange which is also affected.
+#   - _MD_ATOMIC_* macros in _winnt.h (all builds)
+#   - _MD_LOCK lock-contention counters in _winnt.h (#ifdef PROFILE_LOCKS)
+#   - InterlockedCompareExchange called directly in ntio.c and prmwait.c
 #
 # Removable once NSPR uses compiler intrinsics unconditionally on Windows.
 --- a/nspr/pr/include/md/_winnt.h
 +++ b/nspr/pr/include/md/_winnt.h
-@@ -19,6 +19,7 @@
+@@ -17,6 +17,13 @@
+ #endif /* _WIN32_WINNT */
+ 
  #include <windows.h>
-+#define InterlockedCompareExchange _InterlockedCompareExchange
++/* ARM64 kernel32.lib does not export Interlocked* as callable symbols;
++ * redirect all call sites to the equivalent compiler intrinsics. */
++#define InterlockedCompareExchange  _InterlockedCompareExchange
++#define InterlockedIncrement        _InterlockedIncrement
++#define InterlockedDecrement        _InterlockedDecrement
++#define InterlockedExchange         _InterlockedExchange
++#define InterlockedExchangeAdd      _InterlockedExchangeAdd
  #include <winsock.h>
  #ifdef __MINGW32__
-@@ -321,9 +322,9 @@
- #define _MD_INIT_ATOMIC()
- #if defined(_M_IX86) || defined(_X86_)
- #define _MD_ATOMIC_INCREMENT          _PR_MD_ATOMIC_INCREMENT
- #define _MD_ATOMIC_ADD                _PR_MD_ATOMIC_ADD
- #define _MD_ATOMIC_DECREMENT          _PR_MD_ATOMIC_DECREMENT
- #else /* non-x86 processors */
--#define _MD_ATOMIC_INCREMENT(x)       InterlockedIncrement((PLONG)x)
--#define _MD_ATOMIC_ADD(ptr,val)    (InterlockedExchangeAdd((PLONG)ptr, (LONG)val) + val)
--#define _MD_ATOMIC_DECREMENT(x)       InterlockedDecrement((PLONG)x)
-+#define _MD_ATOMIC_INCREMENT(x)       _InterlockedIncrement((PLONG)x)
-+#define _MD_ATOMIC_ADD(ptr,val)    (_InterlockedExchangeAdd((PLONG)ptr, (LONG)val) + val)
-+#define _MD_ATOMIC_DECREMENT(x)       _InterlockedDecrement((PLONG)x)
- #endif /* x86 */
--#define _MD_ATOMIC_SET(x,y)           InterlockedExchange((PLONG)x, (LONG)y)
-+#define _MD_ATOMIC_SET(x,y)           _InterlockedExchange((PLONG)x, (LONG)y)
+ #include <mswsock.h>

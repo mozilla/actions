@@ -7,11 +7,12 @@
 # Removable once NSPR adds _M_ARM64 / _ARM64_ support upstream.
 --- a/nspr/pr/include/md/_winnt.cfg
 +++ b/nspr/pr/include/md/_winnt.cfg
-@@ -69,7 +69,7 @@
+@@ -68,7 +68,7 @@
  #define PR_BYTES_PER_WORD_LOG2	2
  #define PR_BYTES_PER_DWORD_LOG2	2
-
+ 
 -#elif defined(_M_X64) || defined(_M_AMD64) || defined(_AMD64_)
 +#elif defined(_M_X64) || defined(_M_AMD64) || defined(_AMD64_) || defined(_M_ARM64) || defined(_ARM64_)
-
+ 
  #define IS_LITTLE_ENDIAN 1
+ #undef  IS_BIG_ENDIAN

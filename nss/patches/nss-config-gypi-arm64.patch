@@ -10,8 +10,7 @@
 # Removable once NSS adds an ARM64 block to coreconf/config.gypi upstream.
 --- a/nss/coreconf/config.gypi
 +++ b/nss/coreconf/config.gypi
-@@ -589,6 +589,20 @@
-                     'AdditionalOptions': [ '/EHsc' ],
+@@ -589,6 +589,19 @@
                    },
                  },
                }],
@@ -30,3 +29,4 @@
 +              }],
              ],
            }],
+           [ 'disable_dbm==1', {
