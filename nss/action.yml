@@ -211,7 +211,7 @@ runs:
         echo "$HOME/bin" >> "$GITHUB_PATH"
         # gyp-next>=0.22.0 added Windows ARM64 target support (nodejs/gyp-next#331).
         echo "gyp-next>=0.22.0" > req.txt
-        echo "mozfile" >> req.txt
+        echo "mozfile" >> req.txt  # required by nsinstall.py
         python3 -m pip install -r req.txt
 
     - name: Set up MSVC (Windows)
