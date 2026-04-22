@@ -25,7 +25,7 @@ jobs:
           persist-credentials: false
           fetch-depth: 0
 
-      - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+      - uses: mozilla/actions/rust@v1.0.6 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
         with:
           tools: cargo-semver-checks
           token: ${{ github.token }}

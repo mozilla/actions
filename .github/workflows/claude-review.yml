@@ -27,6 +27,6 @@ jobs:
       actions: read # Required to read workflow run context via MCP tools.
       discussions: read # Required to read discussion context via MCP tools.
     steps:
-      - uses: mozilla/actions/claude-review@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+      - uses: mozilla/actions/claude-review@v1.0.6 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
