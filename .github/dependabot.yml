@@ -9,3 +9,10 @@ updates:
     cooldown:
       default-days: 10
       # "semver" not supported for github-actions; see https://docs.github.com/en/code-security/dependabot/working-with-dependabot/dependabot-options-reference#configuration-of-cooldown
+    ignore:
+      # Mozilla org allowlist requires exactly "anthropics/claude-code-action@v1"
+      - dependency-name: "anthropics/claude-code-action"
+      # Self-references; no supply-chain risk, must stay on @v1
+      - dependency-name: "mozilla/actions"
+      # Mozilla org allowlist requires "ilammy/msvc-dev-cmd@v1*"
+      - dependency-name: "ilammy/msvc-dev-cmd"
