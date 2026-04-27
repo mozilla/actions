@@ -1,0 +1,65 @@
+# Add ARM64 MSVC support to NSS's gyp configuration and AES implementation.
+#
+# These two changes are coupled and must be applied or removed together:
+# aes-armv8.c has a `#ifndef __ARM_FEATURE_CRYPTO / #error` guard; that
+# macro is only defined via the PreprocessorDefinitions added to config.gypi.
+#
+# config.gypi: NSS's config.gypi has per-arch MSVS settings for ia32 and x64
+# but not ARM64.  Without this block, gyp leaves msvs_configuration_platform
+# unset for ARM64 (defaults to x86), causing ninja to use the wrong environment
+# and tool paths.  gyp-next >= 0.22.0 handles ARM64 toolchain discovery
+# (environment.arm64, armasm64.exe), but NSS still needs its own preprocessor
+# definitions here.  /EHsc matches what the ia32 and x64 blocks already set.
+#
+# aes-armv8.c: guards its entire body with a preprocessor condition that only
+# matches GCC/Clang.  MSVC ARM64 supports the same NEON AES intrinsics
+# (vaeseq_u8, vaesdq_u8, etc.) but does not define __clang__ or __GNUC__.
+# IS_LITTLE_ENDIAN is included for consistency with the ghash patch — Windows
+# ARM64 is always little-endian, but the explicit guard matches intent.
+# Also adds a no-op __builtin_assume_aligned compat macro.
+#
+# Removable once NSS adds ARM64 MSVC support to config.gypi and aes-armv8.c.
+--- a/nss/coreconf/config.gypi
++++ b/nss/coreconf/config.gypi
+@@ -589,6 +589,19 @@
+                   },
+                 },
+               }],
++              [ 'target_arch=="arm64"', {
++                'msvs_configuration_platform': 'ARM64',
++                'msvs_settings': {
++                  'VCCLCompilerTool': {
++                    'PreprocessorDefinitions': [
++                      'WIN64',
++                      '_ARM64_',
++                      '__ARM_FEATURE_CRYPTO',
++                    ],
++                    'AdditionalOptions': [ '/EHsc' ],
++                  },
++                },
++              }],
+             ],
+           }],
+           [ 'disable_dbm==1', {
+--- a/nss/lib/freebl/aes-armv8.c
++++ b/nss/lib/freebl/aes-armv8.c
+@@ -5,10 +5,15 @@
+ #include "secerr.h"
+ #include "rijndael.h"
+ 
+-#if ((defined(__clang__) ||                                         \
+-      (defined(__GNUC__) && defined(__GNUC_MINOR__) &&              \
+-       (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)))) && \
+-     defined(IS_LITTLE_ENDIAN))
++#if (((defined(__clang__) ||                                        \
++       (defined(__GNUC__) && defined(__GNUC_MINOR__) &&             \
++        (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ > 8)))) && \
++      defined(IS_LITTLE_ENDIAN)) ||                                 \
++     (defined(_MSC_VER) && defined(_M_ARM64) && defined(IS_LITTLE_ENDIAN)))
++
++#ifdef _MSC_VER
++#define __builtin_assume_aligned(ptr, align) (ptr)
++#endif
+ 
+ #ifndef __ARM_FEATURE_CRYPTO
+ #error "Compiler option is invalid"

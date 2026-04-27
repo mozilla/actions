@@ -1,0 +1,18 @@
+# Extend the 64-bit platform branch in _winnt.cfg to cover ARM64.
+#
+# NSPR's _winnt.cfg uses _M_X64 / _M_AMD64 / _AMD64_ to select the 64-bit
+# configuration (IS_64, pointer sizes, etc.).  ARM64 uses the same LLP64 ABI
+# as x64 (64-bit pointers, 32-bit long) and belongs on the same branch.
+#
+# Removable once NSPR adds _M_ARM64 / _ARM64_ support upstream.
+--- a/nspr/pr/include/md/_winnt.cfg
++++ b/nspr/pr/include/md/_winnt.cfg
+@@ -68,7 +68,7 @@
+ #define PR_BYTES_PER_WORD_LOG2	2
+ #define PR_BYTES_PER_DWORD_LOG2	2
+ 
+-#elif defined(_M_X64) || defined(_M_AMD64) || defined(_AMD64_)
++#elif defined(_M_X64) || defined(_M_AMD64) || defined(_AMD64_) || defined(_M_ARM64) || defined(_ARM64_)
+ 
+ #define IS_LITTLE_ENDIAN 1
+ #undef  IS_BIG_ENDIAN
