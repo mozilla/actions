@@ -34,8 +34,8 @@ These are the main focus areas for your review:
 
 5. **Documentation**
    - Ensure code is sufficiently - but not overly! - documented; the developers here are experts
-   - Check whether comments and documentation such as README files related to changed code are
-     up-to-date and accurate
+   - Check whether comments and documentation such as README files are up-to-date and accurate,
+     including for new or changed features
    - Check API documentation accuracy
 
 6. **Miscellaneous**
