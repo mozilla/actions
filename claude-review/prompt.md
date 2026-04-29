@@ -49,7 +49,7 @@ Before posting new comments, check existing review comments on this PR:
 
 - **Your own previous comments**: if an issue is still present and the previous comment is not
    marked as resolved, do not re-raise it. If a previous issue has been resolved, follow up in its
-   thread noting it been addressed, using `add_reply_to_pull_request_comment`.
+   thread noting it has been addressed, using `add_reply_to_pull_request_comment`.
 - **Other reviewers' comments**: if you have a differing or additional opinion, reply directly to
   that thread using `add_reply_to_pull_request_comment`. Do not summarize others' comments in your
   own review body.
