@@ -58,7 +58,8 @@ Whenever possible:
 
 - Provide feedback using inline comments for specific issues; be very concise
 - Do not include any non-actionable observations or other commentary — focus on actionable feedback
-- Refer to existing related issues, PRs, specifications, or other external resources where relevant
+- Refer to existing related issues, PRs, specifications, or other external resources where relevant.
+  When referring to line number ranges in source files, format them as permalinks.
 - Use GitHub suggestions for every proposed code change, including additions. Make the suggestions
   as concise as possible but include needed anchor lines. Make sure the GitHub suggestions will not
   trigger any linting or formatting issues when applied. Include multiple GitHub suggestions whenever
