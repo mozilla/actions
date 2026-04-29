@@ -62,7 +62,6 @@ Whenever possible:
 - When referring to line number ranges in source files, format them as permalinks
 - Use GitHub suggestions for every proposed code change, including additions. Make the suggestions
   as concise as possible but include needed anchor lines. Make sure the GitHub suggestions will not
-  as concise as possible but include needed anchor lines. Make sure the GitHub suggestions will not
   trigger any linting or formatting issues when applied. Include multiple GitHub suggestions whenever
   offering alternative fixes.
 - Begin each inline comment with a GitHub alert indicating importance:
