@@ -57,7 +57,7 @@ Before posting new comments, check existing review comments on this PR:
 Whenever possible:
 
 - Provide feedback using inline comments for specific issues; be very concise
-- Do not include any non-actionable observations or other commentary — focus on actionable feedback
+- Do not create inline comments for non-actionable observations or commentary — focus on actionable feedback
 - Refer to existing related issues, PRs, specifications, or other external resources where relevant.
   When referring to line number ranges in source files, format them as permalinks.
 - Use GitHub suggestions for every proposed code change, including additions. Make the suggestions
