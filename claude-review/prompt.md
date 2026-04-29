@@ -41,7 +41,7 @@ These are the main focus areas for your review:
 6. **Miscellaneous**
    - For changes to code that implements a technical specification (e.g., an IETF or W3C protocol,
      algorithm or other mechanism), verify that the changes implement the specification correctly.
-     For any issues identified, include a links to the relevant sections of the specifications.
+     For any issues identified, include links to the relevant sections of the specifications.
    - Verify correct use of feature gates — new code should not depend on CI-only or
      integration-only features at runtime
 
