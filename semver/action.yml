@@ -1,18 +1,16 @@
 name: Check semver
 description: Check semver requirements of a Rust crate
+branding:
+  icon: git-merge
+  color: orange
 
 inputs:
   package:
     description: Package to check semver for (empty = all packages)
     default: ""
-    type: string
   base-ref:
-    description: Base ref to compare against
+    description: Full git ref to compare against (e.g., origin/main). Defaults to the PR base or default branch.
     default: ""
-    type: string
-
-permissions:
-  contents: read
 
 runs:
   using: composite
