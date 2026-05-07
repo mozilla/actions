@@ -1,0 +1,38 @@
+name: Check semver
+description: Check semver requirements of a Rust crate
+
+inputs:
+  package:
+    description: Package to check semver for (empty = all packages)
+    default: ""
+    type: string
+  base-ref:
+    description: Base ref to compare against
+    default: ""
+    type: string
+
+permissions:
+  contents: read
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+
+    - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+      with:
+        tools: cargo-semver-checks
+        token: ${{ github.token }}
+
+    - name: Check semver
+      env:
+        PACKAGE: ${{ inputs.package }}
+        BASE_REF: ${{ inputs.base-ref || github.event.pull_request.base.ref || github.event.repository.default_branch }}
+      run: |
+        PACKAGE_ARG=""
+        [ -n "$PACKAGE" ] && PACKAGE_ARG="-p $PACKAGE"
+        # shellcheck disable=SC2086
+        cargo semver-checks --default-features --baseline-rev "origin/$BASE_REF" $PACKAGE_ARG
