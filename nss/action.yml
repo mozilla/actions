@@ -153,7 +153,7 @@ runs:
     - name: Use sccache
       # Prevent double-installation if the rust action already enabled sccache.
       if: ${{ inputs.sccache == 'true' && env.SCCACHE_ENABLED != '1' && steps.check_build.outputs.build_nss }}
-      uses: mozilla-actions/sccache-action@7d986dd989559c6ecdb630a3fd2557667be217ad # v0.0.9
+      uses: mozilla-actions/sccache-action@9e7fa8a12102821edf02ca5dbea1acd0f89a2696 # v0.0.10
 
     - name: Enable sccache
       # Also triggers if the rust action already set SCCACHE_ENABLED, so that
