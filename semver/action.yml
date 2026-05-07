@@ -31,9 +31,9 @@ runs:
       shell: bash
       env:
         PACKAGE: ${{ inputs.package }}
-        BASE_REF: ${{ inputs.base-ref || github.event.pull_request.base.ref || github.event.repository.default_branch }}
+        BASE_REF: ${{ inputs.base-ref || format('origin/{0}', github.event.pull_request.base.ref || github.event.repository.default_branch) }}
       run: |
         PACKAGE_ARG=""
         [ -n "$PACKAGE" ] && PACKAGE_ARG="-p $PACKAGE"
         # shellcheck disable=SC2086
-        cargo semver-checks --default-features --baseline-rev "origin/$BASE_REF" $PACKAGE_ARG
+        cargo semver-checks --default-features --baseline-rev "$BASE_REF" $PACKAGE_ARG
