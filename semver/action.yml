@@ -21,7 +21,7 @@ runs:
       with:
         persist-credentials: false
         fetch-depth: 0
-        path: 'semver'
+        path: "semver"
 
     - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
       with:
