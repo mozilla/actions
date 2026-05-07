@@ -17,6 +17,12 @@ permissions:
 runs:
   using: composite
   steps:
+    - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      with:
+        persist-credentials: false
+        fetch-depth: 0
+        path: 'semver'
+
     - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
       with:
         tools: cargo-semver-checks
@@ -30,5 +36,6 @@ runs:
       run: |
         PACKAGE_ARG=""
         [ -n "$PACKAGE" ] && PACKAGE_ARG="-p $PACKAGE"
+        cd semver
         # shellcheck disable=SC2086
         cargo semver-checks --default-features --baseline-rev "$BASE_REF" $PACKAGE_ARG
