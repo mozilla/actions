@@ -72,6 +72,18 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
 | `budget`            | `5.00`              | Max spend per review in USD                     |
 | `prompt`            | `""`                | Additional project-specific review instructions |
 
+### `semver` — Semver compatibility
+
+Runs [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks)
+against a baseline revision to catch breaking API changes.
+
+```yaml
+- uses: mozilla/actions/semver@v1
+  with:
+    package: my-crate # optional; omit to check all packages
+    base-ref: origin/main # optional; defaults to the PR base or default branch
+```
+
 ### `nss` — Install Mozilla NSS
 
 Installs Mozilla's Network Security Services (NSS) library. Uses the system
@@ -137,10 +149,6 @@ jobs:
     uses: mozilla/actions/.github/workflows/mutants-pr.yml@v1
   mutants:
     uses: mozilla/actions/.github/workflows/mutants.yml@v1
-  semver:
-    uses: mozilla/actions/.github/workflows/semver.yml@v1
-    with:
-      package: my-crate # optional; omit to check all packages
 ```
 
 ### `claude-review.yml` — Claude Code Review
@@ -207,12 +215,6 @@ Runs `cargo-mutants` across the entire codebase in parallel shards
 (configurable via `shards` input). Designed for scheduled runs — callers must
 provide their own `schedule` trigger. Merges shard results and posts a summary
 with missed/caught/timeout counts.
-
-### `semver.yml` — Semver compatibility
-
-Runs [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks)
-against the PR base branch to catch breaking API changes. Accepts a `package`
-input to check a specific crate (omit to check all packages).
 
 ## Versioning
 
