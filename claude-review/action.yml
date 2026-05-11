@@ -34,11 +34,19 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         EXTRA_PROMPT: ${{ inputs.prompt }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPOSITORY: ${{ github.repository }}
       run: |
         # Use a random delimiter to prevent injection via the prompt input.
         DELIM="EOF_$(head -c 8 /dev/urandom | xxd -p)"
         {
           echo "content<<$DELIM"
+          # Explicitly anchor Claude to the correct PR so concurrent workflow runs
+          # for different PRs cannot cross-contaminate each other's reviews.
+          echo "You are reviewing pull request #${PR_NUMBER} in repository ${REPOSITORY}."
+          echo "IMPORTANT: Post all review comments exclusively to pull request #${PR_NUMBER}."
+          echo "You may read other pull requests for context, but do not post comments to them."
+          echo ""
           cat "$ACTION_PATH/prompt.md"
           if [[ -n "$EXTRA_PROMPT" ]]; then
             echo ""
