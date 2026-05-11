@@ -73,5 +73,5 @@ Whenever possible:
 Post a single PR-level review comment summarizing the changes and any architectural considerations
 (e.g., simpler alternatives). Keep it concise. Do not repeat points already made as inline comments
 — the PR-level comment is for observations that apply to the PR as a whole, not individual lines.
-Do not post a separate issue comment — use only the formal GitHub review.
+Do not post a separate issue comment — use only the formal GitHub review. Never post review placeholders.
 Make sure all the GitHub-flavored Markdown you emit is syntactically correct.
