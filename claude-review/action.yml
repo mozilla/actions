@@ -34,9 +34,13 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         EXTRA_PROMPT: ${{ inputs.prompt }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
       run: |
+        if [[ -z "$PR_NUMBER" ]]; then
+          echo "::error::Claude Code Review must run on a pull request event, or another event that provides a pull request number."
+          exit 1
+        fi
         # Use a random delimiter to prevent injection via the prompt input.
         DELIM="EOF_$(head -c 8 /dev/urandom | xxd -p)"
         {
