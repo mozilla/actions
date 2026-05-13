@@ -16,6 +16,12 @@
       "transformTemplates": [
         "{\"releases\": tags[$match(tag, /^NSPR_\\d+_\\d+(_\\d+)?_RTM$/)].{\"version\": $join($split($replace($replace(tag, \"NSPR_\", \"\"), \"_RTM\", \"\"), \"_\"), \".\")}}"
       ]
+    },
+    "firefox": {
+      "defaultRegistryUrlTemplate": "https://hg-edge.mozilla.org/releases/mozilla-release/json-tags",
+      "transformTemplates": [
+        "{\"releases\": tags[$match(tag, /^FIREFOX_\\d+_\\d+(_\\d+)?_RELEASE$/)].{\"version\": tag}}"
+      ]
     }
   },
   "customManagers": [
@@ -31,16 +37,17 @@
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION: \"(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION=\"v(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)"
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[^\\n]+/raw-file/(?<currentValue>FIREFOX_[^/]+)/[^\\n]+"
       ]
     }
   ],
   "packageRules": [
     {
       "description": "SHA256 checksums must be updated manually alongside these version bumps",
-      "matchDepNames": ["rhysd/actionlint", "nss", "nspr"],
+      "matchDepNames": ["rhysd/actionlint", "nss", "nspr", "firefox"],
       "prBodyNotes": [
-        "⚠️ **Manual step required**: update the SHA256 checksum(s) that correspond to this version bump:\n- `rhysd/actionlint`: update `SHA256` in `.github/workflows/actionlint.yml` from the [release checksums file](https://github.com/rhysd/actionlint/releases)\n- `nss`/`nspr`: update `NSS_SHA256`/`NSPR_SHA256` in `nss/nss-versions.env` from the Mozilla FTP release"
+        "⚠️ **Manual step required**: update the SHA256 checksum(s) that correspond to this version bump:\n- `rhysd/actionlint`: update `SHA256` in `.github/workflows/actionlint.yml` from the [release checksums file](https://github.com/rhysd/actionlint/releases)\n- `nss`/`nspr`: update `NSS_SHA256`/`NSPR_SHA256` in `nss/nss-versions.env` from the Mozilla FTP release\n- `firefox`: update the `sha256sum` checksum for `nsinstall.py` in `nss/action.yml`"
       ]
     }
   ]

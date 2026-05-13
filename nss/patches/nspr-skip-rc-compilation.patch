@@ -1,0 +1,20 @@
+# Skip NSPR resource file compilation on Windows ARM64.
+#
+# NSPR's Makefile builds nspr.rc into a .res file via rc.exe.  On ARM64,
+# rc.exe's preprocessor cannot parse ARM64-specific constructs in NSPR's
+# headers and fails.  The resource file is only needed for shared-library
+# version metadata and is not required for the static build we produce.
+# Clearing RES= suppresses the rc.exe invocation entirely.
+#
+# Removable once NSPR's Windows Makefile handles ARM64 resource compilation.
+--- a/nspr/pr/src/Makefile.in
++++ b/nspr/pr/src/Makefile.in
+@@ -245,7 +245,7 @@
+ endif
+ 
+ ifeq ($(OS_ARCH), WINNT)
+-RES=$(OBJDIR)/nspr.res
++RES=
+ RESNAME=nspr.rc
+ endif # WINNT
+ 
