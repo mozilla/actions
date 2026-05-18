@@ -122,6 +122,7 @@ jobs:
       pull-requests: write
       issues: read
       actions: read
+      discussions: read
     secrets: inherit
   deny:
     uses: mozilla/actions/.github/workflows/deny.yml@v1
