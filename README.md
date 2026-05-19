@@ -150,6 +150,11 @@ jobs:
     uses: mozilla/actions/.github/workflows/mutants-pr.yml@v1
   mutants:
     uses: mozilla/actions/.github/workflows/mutants.yml@v1
+  sbom:
+    uses: mozilla/actions/.github/workflows/sbom.yml@v1
+    permissions:
+      actions: read # Required by anchore/sbom-action to read workflow run context.
+      contents: write # Required to upload the SBOM as a release asset.
 ```
 
 ### `claude-review.yml` — Claude Code Review
@@ -216,6 +221,32 @@ Runs `cargo-mutants` across the entire codebase in parallel shards
 (configurable via `shards` input). Designed for scheduled runs — callers must
 provide their own `schedule` trigger. Merges shard results and posts a summary
 with missed/caught/timeout counts.
+
+### `sbom.yml` — SBOM generation
+
+Wraps Mozilla's [`ssdlc-sbom`](https://github.com/mozilla/ssdlc-actions)
+reusable workflow to generate a Software Bill of Materials for SSDLC
+compliance. Centralizes the pinned `ssdlc-actions` SHA and names the SBOM after
+the release tag (on release events) or commit SHA. Callers supply the trigger
+(typically `release: published` and/or pushes to a release branch):
+
+```yaml
+name: SBOM
+on:
+  release:
+    types: [published]
+  push:
+    branches:
+      - 'release/**' # adjust to your release branch pattern
+  workflow_dispatch:
+
+jobs:
+  sbom:
+    uses: mozilla/actions/.github/workflows/sbom.yml@v1
+    permissions:
+      actions: read # Required by anchore/sbom-action to read workflow run context.
+      contents: write # Required to upload the SBOM as a release asset.
+```
 
 ## Versioning
 
