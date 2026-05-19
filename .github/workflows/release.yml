@@ -42,3 +42,11 @@ jobs:
             || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
               --field ref="refs/tags/$REF" --field sha="$SHA"
           done
+
+  sbom:
+    name: SBOM
+    if: github.event_name == 'release'
+    uses: ./.github/workflows/sbom.yml
+    permissions:
+      actions: read # Required by anchore/sbom-action to read workflow run context.
+      contents: write # Required to upload the SBOM as a release asset.
