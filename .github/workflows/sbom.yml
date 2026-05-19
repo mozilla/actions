@@ -1,6 +1,7 @@
 name: SBOM
 on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
   workflow_call:
+  workflow_dispatch:
 
 permissions: {}
 
