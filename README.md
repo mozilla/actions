@@ -21,6 +21,7 @@ MSVC setup on Windows.
     targets: aarch64-unknown-linux-gnu # Comma-separated target triples
     rust-cache: true # Whether to enable rust-cache (default: true; auto-disabled when sccache: true)
     sccache: false # Whether to enable sccache (default: false)
+    make-default: true # Whether to make this toolchain the default (default: true)
 ```
 
 ### `toolchains` — Determine Rust toolchains from MSRV
@@ -71,6 +72,24 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
 | `fallback_model`    | `claude-sonnet-4-6` | Fallback model                                  |
 | `budget`            | `5.00`              | Max spend per review in USD                     |
 | `prompt`            | `""`                | Additional project-specific review instructions |
+
+### `crap` — CRAP analysis
+
+Runs [`cargo-crap`](https://github.com/minikin/cargo-crap) to compute
+[CRAP (Change Risk Anti-Patterns)](https://testing.googleblog.com/2011/02/this-code-is-crap.html)
+scores for Rust functions. CRAP combines cyclomatic complexity with test
+coverage — high-complexity, low-coverage functions score above the threshold.
+Installs nightly Rust, `cargo-llvm-cov`, and `cargo-crap` automatically.
+
+```yaml
+- uses: mozilla/actions/crap@v1
+  with:
+    features: ci # Cargo features for coverage (optional)
+    threshold: "30" # CRAP score threshold (default: 30)
+    output: crap.sarif # SARIF output path (default: crap.sarif)
+    token: ${{ github.token }} # Avoid API rate limits (optional)
+    lcov-path: lcov.info # Use pre-existing LCOV instead of generating (optional)
+```
 
 ### `semver` — Semver compatibility
 
@@ -146,6 +165,14 @@ jobs:
     uses: mozilla/actions/.github/workflows/sanitize.yml@v1
     with:
       features: ci # optional
+  crap:
+    uses: mozilla/actions/.github/workflows/crap.yml@v1
+    permissions:
+      contents: read
+      security-events: write # Required to upload SARIF results to GitHub
+    with:
+      features: ci # optional
+      threshold: 30 # optional
   mutants-pr:
     uses: mozilla/actions/.github/workflows/mutants-pr.yml@v1
   mutants:
@@ -208,6 +235,16 @@ Runs tests with address, thread, and leak sanitizers on Linux and macOS using
 nightly Rust. Accepts a `features` input to enable project-specific Cargo
 features during testing. macOS leak sanitizer suppresses known system library
 leaks automatically.
+
+### `crap.yml` — CRAP analysis
+
+Runs [`cargo-crap`](https://github.com/minikin/cargo-crap) across a matrix of
+OS (Linux, macOS, Windows) to compute CRAP scores. Generates test coverage via
+`cargo-llvm-cov`, then uploads results as SARIF to GitHub Code Scanning. On
+pull requests, GitHub automatically highlights new high-CRAP functions
+(regressions from the default branch baseline). Accepts a `features` input to
+enable project-specific Cargo features during coverage, and a `threshold` input
+to control the CRAP score cutoff (default: 30).
 
 ### `mutants-pr.yml` — PR mutation testing
 

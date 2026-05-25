@@ -128,6 +128,14 @@ jobs:
   sanitize:
     uses: ./.github/workflows/sanitize.yml
 
+  crap:
+    uses: ./.github/workflows/crap.yml
+    permissions:
+      contents: read
+      security-events: write # Required to upload SARIF results to GitHub
+    with:
+      features: hashing,encoding
+
   mutants:
     uses: ./.github/workflows/mutants.yml
     with:

@@ -29,6 +29,9 @@ inputs:
   sccache:
     description: Whether to enable sccache for Rust compilation caching
     default: "false"
+  make-default:
+    description: Whether to make the installed toolchain the default
+    default: "true"
 
 runs:
   using: composite
@@ -43,6 +46,7 @@ runs:
         VERSION: ${{ inputs.version }}
         COMPONENTS: ${{ inputs.components }}
         TARGETS: ${{ inputs.targets }}
+        MAKE_DEFAULT: ${{ inputs.make-default }}
       run: |
         rustup toolchain install "$VERSION" --profile minimal
         # Trim whitespace, since composite expressions may yield spaces.
@@ -57,7 +61,7 @@ runs:
             rustup target add --toolchain "$VERSION" "$target"
           done
         fi
-        rustup default "$VERSION"
+        if [ "$MAKE_DEFAULT" = "true" ]; then rustup default "$VERSION"; fi
 
     - name: Use sccache
       # Prevent double-installation if the action is invoked multiple times in

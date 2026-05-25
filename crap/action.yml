@@ -1,0 +1,59 @@
+name: CRAP Analysis
+description: Compute CRAP (Change Risk Anti-Patterns) scores for Rust code
+branding:
+  icon: alert-triangle
+  color: orange
+
+inputs:
+  lcov-path:
+    description: Path to a pre-existing LCOV file. If empty, coverage is generated via cargo-llvm-cov.
+    default: ""
+  features:
+    description: Cargo features to enable during coverage generation (ignored if lcov-path is set)
+    default: ""
+  threshold:
+    description: CRAP score threshold (functions above this are flagged)
+    default: "30"
+  output:
+    description: Path for the SARIF output file
+    default: "crap.sarif"
+  token:
+    description: GitHub token to avoid API rate limits during tool installation
+    required: false
+
+outputs:
+  sarif-file:
+    description: Path to the generated SARIF file
+    value: ${{ steps.crap.outputs.sarif-file }}
+
+runs:
+  using: composite
+  steps:
+    - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+      with:
+        version: nightly
+        tools: cargo-llvm-cov,cargo-crap
+        token: ${{ inputs.token }}
+        make-default: "false"
+
+    - name: Generate coverage
+      if: ${{ inputs.lcov-path == '' }}
+      shell: bash
+      env:
+        FEATURES: ${{ inputs.features }}
+      run: |
+        FEATURES_ARG=""
+        [ -n "$FEATURES" ] && FEATURES_ARG="--features $FEATURES"
+        # shellcheck disable=SC2086
+        cargo +nightly llvm-cov --workspace --lcov --output-path lcov.info --locked $FEATURES_ARG
+
+    - name: Run CRAP analysis
+      id: crap
+      shell: bash
+      env:
+        LCOV_PATH: ${{ inputs.lcov-path || 'lcov.info' }}
+        THRESHOLD: ${{ inputs.threshold }}
+        OUTPUT: ${{ inputs.output }}
+      run: |
+        cargo crap --workspace --lcov "$LCOV_PATH" --threshold "$THRESHOLD" --format sarif --output "$OUTPUT"
+        echo "sarif-file=$OUTPUT" >> "$GITHUB_OUTPUT"

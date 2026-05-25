@@ -1,0 +1,48 @@
+name: CRAP
+on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
+  workflow_call:
+    inputs:
+      features:
+        description: Cargo features to enable during coverage (e.g. "ci")
+        default: ""
+        type: string
+      threshold:
+        description: CRAP score threshold (functions above this are flagged)
+        default: 30
+        type: number
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  crap:
+    name: CRAP analysis
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    permissions:
+      security-events: write # Required to upload SARIF results to GitHub
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - uses: ./crap
+        with:
+          features: ${{ inputs.features }}
+          threshold: ${{ inputs.threshold }}
+          token: ${{ github.token }}
+
+      - name: Upload SARIF
+        if: success() || failure()
+        uses: github/codeql-action/upload-sarif@68bde559dea0fdcac2102bfdf6230c5f70eb485e # v4.35.4
+        with:
+          sarif_file: crap.sarif
+          category: cargo-crap-${{ runner.os }}
