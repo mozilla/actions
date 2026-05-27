@@ -255,7 +255,7 @@ runs:
           # TODO: This version must also be updated when NSS versions change,
           # as the build script references library names that may change across NSS releases.
           # renovate: depName=mozilla/application-services datasource=github-releases versioning=loose
-          VERSION="v150.0"
+          VERSION="v152.0"
           for file in build-nss-android.sh build-android-common.sh; do
             curl -o "$file" -sSf \
               "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
