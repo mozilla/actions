@@ -246,7 +246,6 @@ runs:
       env:
         TARGET_PLATFORM: ${{ inputs.target }}
         RUNNER_OS: ${{ runner.os }}
-        GITHUB_TOKEN: ${{ inputs.token }}
       run: |
         # We want to do an optimized build for accurate CPU profiling, but
         # we also want debug symbols and frame pointers for that, which the normal optimized NSS
@@ -259,7 +258,6 @@ runs:
           VERSION="v150.0"
           for file in build-nss-android.sh build-android-common.sh; do
             curl -o "$file" -sSf \
-              -H "Authorization: Bearer ${GITHUB_TOKEN}" \
               "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
             chmod +x "$file"
           done
