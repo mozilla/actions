@@ -1,6 +1,7 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+  "prHourlyLimit": 0,
   "dependencyDashboard": false,
   "gitAuthor": "Lars Eggert <200328+larseggert@users.noreply.github.com>",
   "enabledManagers": ["custom.regex"],
