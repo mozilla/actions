@@ -28,19 +28,37 @@
         "/\\.env$/"
       ],
       "matchStrings": [
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION: \"(?<currentValue>[0-9][0-9.]*)\"",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+: \"(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+VERSION=\"v(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)"
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)"
       ]
     }
   ],
   "packageRules": [
     {
-      "description": "SHA256 checksums must be updated manually alongside these version bumps",
-      "matchDepNames": ["rhysd/actionlint", "nss", "nspr"],
+      "matchDepNames": ["rhysd/actionlint"],
       "prBodyNotes": [
-        "⚠️ **Manual step required**: update the SHA256 checksum(s) that correspond to this version bump:\n- `rhysd/actionlint`: update `SHA256` in `.github/workflows/actionlint.yml` from the [release checksums file](https://github.com/rhysd/actionlint/releases)\n- `nss`/`nspr`: update `NSS_SHA256`/`NSPR_SHA256` in `nss/nss-versions.env` from the Mozilla FTP release"
+        "⚠️ **Manual step required**: update `SHA256` in `actionlint.yml` from the [release checksums file](https://github.com/rhysd/actionlint/releases/download/v{{newVersion}}/actionlint_{{newVersion}}_checksums.txt)"
+      ]
+    },
+    {
+      "matchDepNames": ["nss"],
+      "prBodyNotes": [
+        "⚠️ **Manual step required**: update `NSS_SHA256` in `nss-versions.env` from the Mozilla FTP [SHA256SUMS file](https://ftp.mozilla.org/pub/security/nss/releases/) (navigate to `NSS_{{newVersion}}_RTM/src/SHA256SUMS`, replacing `.` with `_` in the version)"
+      ]
+    },
+    {
+      "matchDepNames": ["nspr"],
+      "prBodyNotes": [
+        "⚠️ **Manual step required**: update `NSPR_SHA256` in `nss-versions.env` from the [Mozilla FTP SHA256SUMS file](https://ftp.mozilla.org/pub/nspr/releases/v{{newVersion}}/src/SHA256SUMS)"
+      ]
+    },
+    {
+      "matchDepNames": ["cargo-bins/cargo-binstall"],
+      "prBodyNotes": [
+        "⚠️ **Manual step required**: update `BINSTALL_SHA` in `rust/action.yml` with the commit SHA for the [v{{newVersion}} release tag](https://github.com/cargo-bins/cargo-binstall/releases/tag/v{{newVersion}})"
       ]
     }
   ]
