@@ -116,7 +116,7 @@ runs:
       run: |
         # renovate: depName=cargo-bins/cargo-binstall datasource=github-releases
         BINSTALL_VERSION=1.19.1
-        BINSTALL_SHA=ec80feb9e330418e014932e5982599255eff6dbb
+        BINSTALL_SHA=aaa84a43aec4955a42c5ffc65d258961e39f276e
         curl -L --proto '=https' --tlsv1.2 -sSf \
           "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/${BINSTALL_SHA}/install-from-binstall-release.sh" | bash
 
