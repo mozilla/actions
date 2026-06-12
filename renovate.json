@@ -7,15 +7,17 @@
   "enabledManagers": ["custom.regex"],
   "customDatasources": {
     "nss": {
-      "defaultRegistryUrlTemplate": "https://hg-edge.mozilla.org/projects/nss/json-tags",
+      "defaultRegistryUrlTemplate": "https://ftp.mozilla.org/pub/security/nss/releases/",
+      "format": "html",
       "transformTemplates": [
-        "{\"releases\": tags[$match(tag, /^NSS_\\d+_\\d+(_\\d+)?_RTM$/)].{\"version\": $join($split($replace($replace(tag, \"NSS_\", \"\"), \"_RTM\", \"\"), \"_\"), \".\")}}"
+        "{\"releases\": releases[$match(version, /NSS_\\d+_\\d+(_\\d+)?_RTM/)].{\"version\": $replace($replace($replace(version, /^.*NSS_/, \"\"), /_RTM\\/$/, \"\"), /_/, \".\")}}"
       ]
     },
     "nspr": {
-      "defaultRegistryUrlTemplate": "https://hg-edge.mozilla.org/projects/nspr/json-tags",
+      "defaultRegistryUrlTemplate": "https://ftp.mozilla.org/pub/nspr/releases/",
+      "format": "html",
       "transformTemplates": [
-        "{\"releases\": tags[$match(tag, /^NSPR_\\d+_\\d+(_\\d+)?_RTM$/)].{\"version\": $join($split($replace($replace(tag, \"NSPR_\", \"\"), \"_RTM\", \"\"), \"_\"), \".\")}}"
+        "{\"releases\": releases[$match(version, /v\\d+\\.\\d+/)].{\"version\": $replace($replace(version, /^(?:.*\\/)?v/, \"\"), /\\/$/, \"\")}}"
       ]
     }
   },
@@ -47,15 +49,19 @@
     },
     {
       "matchDepNames": ["nss"],
-      "prBodyNotes": [
-        "⚠️ **Manual step required**: update `NSS_SHA256` in `nss-versions.env` from the Mozilla FTP [SHA256SUMS file](https://ftp.mozilla.org/pub/security/nss/releases/) (navigate to `NSS_{{newVersion}}_RTM/src/SHA256SUMS`, replacing `.` with `_` in the version)"
-      ]
+      "postUpgradeTasks": {
+        "commands": ["bash nss/update-sha256.sh nss {{newVersion}}"],
+        "fileFilters": ["nss/nss-versions.env"],
+        "executionMode": "update"
+      }
     },
     {
       "matchDepNames": ["nspr"],
-      "prBodyNotes": [
-        "⚠️ **Manual step required**: update `NSPR_SHA256` in `nss-versions.env` from the [Mozilla FTP SHA256SUMS file](https://ftp.mozilla.org/pub/nspr/releases/v{{newVersion}}/src/SHA256SUMS)"
-      ]
+      "postUpgradeTasks": {
+        "commands": ["bash nss/update-sha256.sh nspr {{newVersion}}"],
+        "fileFilters": ["nss/nss-versions.env"],
+        "executionMode": "update"
+      }
     }
   ]
 }
