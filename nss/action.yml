@@ -231,15 +231,6 @@ runs:
       shell: bash
       if: ${{ runner.os == 'Windows' && steps.check_build.outputs.build_nss }}
       run: |
-        # Work around NSS's coreconf/msvc.sh bug with MSVC 18 (VS 2026):
-        # Set VSPATH so msvc.sh skips its setup branch, and configure the gyp overrides ourselves.
-        if [ "${VSCMD_VER%%.*}" = "18" ]; then
-          {
-            echo "VSPATH=$VSINSTALLDIR"
-            echo "GYP_MSVS_OVERRIDE_PATH=$VSINSTALLDIR"
-            echo "GYP_MSVS_VERSION=2026"
-          } >> "$GITHUB_ENV"
-        fi
         # See https://github.com/ilammy/msvc-dev-cmd#name-conflicts-with-shell-bash
         rm /usr/bin/link.exe || true
 
@@ -328,18 +319,20 @@ runs:
         else
           [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
           NSS_EXTRA=""
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            # nss-msvc-arm64.patch also fixes VS 2026 compatibility on all Windows
+            # targets, so it is applied unconditionally.
+            patch -p1 < "$GITHUB_ACTION_PATH/patches/nss-msvc-arm64.patch"
+          fi
           if [ "$RUNNER_OS" == "Windows" ] && [ "$RUNNER_ARCH" == "ARM64" ]; then
-            # Apply patches to NSPR and NSS for Windows ARM64 MSVC support.
+            # Apply ARM64-specific patches to NSPR and NSS.
             # Each patch file can be removed individually as upstream adds support,
             # except nss-arm64-gyp-and-aes.patch which bundles two coupled changes.
             for p in "$GITHUB_ACTION_PATH/patches/"*.patch; do
+              [ "$p" = "$GITHUB_ACTION_PATH/patches/nss-msvc-arm64.patch" ] && continue
               patch -p1 < "$p"
             done
 
-            # coreconf/msvc.sh only handles ia32 and x64; setting VSPATH bypasses
-            # its toolchain discovery and uses the environment set by ilammy/msvc-dev-cmd.
-            # TODO: Remove once NSS msvc.sh supports ARM64.
-            export VSPATH="${VSINSTALLDIR:?VSINSTALLDIR must be set — ensure ilammy/msvc-dev-cmd ran successfully}"
             NSS_EXTRA="--target=arm64"
           fi
           # shellcheck disable=SC2086
