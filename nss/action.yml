@@ -190,7 +190,7 @@ runs:
       run: |
         brew install ninja
         # renovate: depName=gyp-next datasource=pypi
-        echo "gyp-next==0.22.1" > req.txt
+        echo "gyp-next==0.22.2" > req.txt
         python3 -m pip install --break-system-packages -r req.txt
 
     - name: Install build dependencies (Windows)
@@ -204,7 +204,7 @@ runs:
         } >> "$GITHUB_PATH"
         /c/msys64/usr/bin/pacman -S --noconfirm python3-pip nsinstall
         # renovate: depName=gyp-next datasource=pypi
-        echo "gyp-next==0.22.1" > req.txt
+        echo "gyp-next==0.22.2" > req.txt
         python3 -m pip install -r req.txt
 
     - name: Set up MSVC (Windows)
