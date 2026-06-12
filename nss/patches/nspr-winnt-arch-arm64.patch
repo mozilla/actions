@@ -1,0 +1,17 @@
+# Add ARM64 to _PR_SI_ARCHITECTURE detection in _winnt.h.
+#
+# _winnt.h defines _PR_SI_ARCHITECTURE for x86, x86-64, and ia64, but
+# has a #error fallthrough for any other architecture.  Without this patch
+# every ARM64 compilation fails with "unknown processor architecture".
+#
+# Removable once NSPR adds ARM64 support to _winnt.h upstream.
+--- a/nspr/pr/include/md/_winnt.h
++++ b/nspr/pr/include/md/_winnt.h
+@@ -45,6 +45,8 @@
+ #elif defined(_M_IA64) || defined(_IA64_)
+ #define _PR_SI_ARCHITECTURE   "ia64"
++#elif defined(_M_ARM64) || defined(_ARM64_)
++#define _PR_SI_ARCHITECTURE   "aarch64"
+ #else
+ #error unknown processor architecture
+ #endif

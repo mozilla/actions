@@ -406,11 +406,17 @@ runs:
           # headers, and NSS_BUILD_FLAGS already carries -t ia32.
           [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
           NSS_EXTRA=""
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            # nss-msvc-arm64.patch also fixes VS 2026 compatibility on all Windows
+            # targets, so it is applied unconditionally.
+            patch -p1 < "$GITHUB_ACTION_PATH/patches/nss-msvc-arm64.patch"
+          fi
           if [ "$RUNNER_OS" == "Windows" ] && [ "$RUNNER_ARCH" == "ARM64" ]; then
-            # Apply patches to NSPR and NSS for Windows ARM64 MSVC support.
+            # Apply ARM64-specific patches to NSPR and NSS.
             # Each patch file can be removed individually as upstream adds support,
             # except nss-arm64-gyp-and-aes.patch which bundles two coupled changes.
             for p in "$GITHUB_ACTION_PATH/patches/"*.patch; do
+              [ "$p" = "$GITHUB_ACTION_PATH/patches/nss-msvc-arm64.patch" ] && continue
               patch -p1 < "$p"
             done
             NSS_EXTRA="--target=arm64"

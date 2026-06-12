@@ -1,0 +1,24 @@
+# Pass correct flags to NSPR configure when building for Windows ARM64.
+#
+# nspr.sh passes --enable-64bit for x64 targets but nothing for aarch64,
+# leaving NSPR configure to detect the arch from uname -m — which returns
+# "x86_64" on ARM64 Windows runners where the shell is x64 under emulation.
+#
+# --enable-64bit enables 64-bit pointer/word size.
+# --host=aarch64-pc-mingw32 activates configure's cross-compile path so
+# that target_cpu=aarch64 is set and the mingw* case selects ARM64 flags.
+#
+# Removable once NSS's nspr.sh handles ARM64 natively.
+diff --git a/coreconf/nspr.sh b/coreconf/nspr.sh
+index 28b9c4d47..bb36f0ce0 100644
+--- a/nss/coreconf/nspr.sh
++++ b/nss/coreconf/nspr.sh
+@@ -34,6 +34,8 @@ nspr_build()
+     fi
+     if [ "$target_arch" = "x64" ]; then
+         extra_params+=(--enable-64bit)
++    elif [ "$target_arch" = "arm64" ] || [ "$target_arch" = "aarch64" ]; then
++        extra_params+=(--enable-64bit --host=aarch64-pc-mingw32)
+     fi
+ 
+     if [[ -n "$CC" && -n "$build_tools_cc" && "$CC" != "$build_tools_cc" ]]; then
