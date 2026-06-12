@@ -62,6 +62,10 @@
         "fileFilters": ["nss/nss-versions.env"],
         "executionMode": "update"
       }
+    },
+    {
+      "matchDepNames": ["cargo-bins/cargo-binstall"],
+      "extractVersion": "^v?(?<version>.+)$"
     }
   ]
 }
