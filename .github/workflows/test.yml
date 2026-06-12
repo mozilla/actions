@@ -44,6 +44,7 @@ jobs:
           version: stable
           tools: cargo-nextest
           token: ${{ github.token }}
+          rust-cache: false
 
       - name: Verify installation
         run: |
@@ -90,7 +91,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2025]
+        os:
+          - ubuntu-22.04
+          - ubuntu-24.04
+          - ubuntu-24.04-arm
+          - macos-15
+          - macos-15-intel
+          - windows-2022
+          - windows-2025
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -103,6 +111,7 @@ jobs:
       - uses: ./nss
         with:
           minimum-version: "3.90"
+          cache: false
 
       - name: Verify NSS is available
         run: |
@@ -145,6 +154,13 @@ jobs:
   test-nss-android:
     name: Test NSS action (Android)
     timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - aarch64-linux-android
+          - arm-linux-androideabi
+          - x86_64-linux-android
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -164,17 +180,12 @@ jobs:
           accept-android-sdk-licenses: true
           log-accepted-android-sdk-licenses: false
 
-      - name: Install Android NDK
-        run: |
-          # NDK version matches Mozilla's official build toolchain.
-          # See https://searchfox.org/mozilla-central/search?q=NDK_VERSION=&path=python/mozboot/mozboot/android.py
-          sdkmanager --install "ndk;27.2.12479018"
-
       - uses: ./nss
         with:
           minimum-version: "3.90"
-          target: aarch64-linux-android
+          target: ${{ matrix.target }}
           token: ${{ github.token }}
+          cache: false
 
       - name: Verify NSS is available for Android
         run: |

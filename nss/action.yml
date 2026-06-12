@@ -16,6 +16,9 @@ inputs:
   target:
     description: "Target for cross-compilation"
     default: ""
+  cache:
+    description: "Whether to cache the NSS build artifacts"
+    default: "true"
   sccache:
     description: Whether to enable sccache for NSS compilation caching
     default: "false"
@@ -130,7 +133,7 @@ runs:
     # Downside: PRs that change NSS version/build will rebuild on every CI run.
     - name: Restore NSS cache
       id: cache
-      if: ${{ !steps.system_nss.outputs.suitable }}
+      if: ${{ inputs.cache == 'true' && !steps.system_nss.outputs.suitable }}
       uses: actions/cache/restore@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: dist
@@ -186,7 +189,8 @@ runs:
       if: ${{ runner.os == 'MacOS' && steps.check_build.outputs.build_nss }}
       run: |
         brew install ninja
-        echo "gyp-next>=0.18.1" > req.txt
+        # renovate: depName=gyp-next datasource=pypi
+        echo "gyp-next==0.22.1" > req.txt
         python3 -m pip install --break-system-packages -r req.txt
 
     - name: Install build dependencies (Windows)
@@ -199,7 +203,8 @@ runs:
           echo C:/msys64/mingw64/bin
         } >> "$GITHUB_PATH"
         /c/msys64/usr/bin/pacman -S --noconfirm python3-pip nsinstall
-        echo "gyp-next>=0.18.1" > req.txt
+        # renovate: depName=gyp-next datasource=pypi
+        echo "gyp-next==0.22.1" > req.txt
         python3 -m pip install -r req.txt
 
     - name: Set up MSVC (Windows)
@@ -212,11 +217,15 @@ runs:
       shell: bash
       if: ${{ runner.os == 'Windows' && steps.check_build.outputs.build_nss }}
       run: |
-        {
-          echo "GYP_MSVS_OVERRIDE_PATH=$VSINSTALLDIR"
-          echo "GYP_MSVS_VERSION=2022"
-          echo "BASH=$SHELL"
-        } >> "$GITHUB_ENV"
+        # Work around NSS's coreconf/msvc.sh bug with MSVC 18 (VS 2026):
+        # Set VSPATH so msvc.sh skips its setup branch, and configure the gyp overrides ourselves.
+        if [ "${VSCMD_VER%%.*}" = "18" ]; then
+          {
+            echo "VSPATH=$VSINSTALLDIR"
+            echo "GYP_MSVS_OVERRIDE_PATH=$VSINSTALLDIR"
+            echo "GYP_MSVS_VERSION=2026"
+          } >> "$GITHUB_ENV"
+        fi
         # See https://github.com/ilammy/msvc-dev-cmd#name-conflicts-with-shell-bash
         rm /usr/bin/link.exe || true
 
@@ -261,7 +270,19 @@ runs:
               "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
             chmod +x "$file"
           done
-          # See https://github.com/actions/runner-images/blob/main/images/ubuntu/Ubuntu2404-Readme.md#android
+          # sdkmanager is provided by setup-android; ANDROID_SDK_ROOT by setup-android or the runner image.
+          ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
+          test -n "$ANDROID_SDK_ROOT" || { echo "::error::ANDROID_SDK_ROOT/ANDROID_HOME is not set; run android-actions/setup-android before this action"; exit 1; }
+          command -v sdkmanager >/dev/null 2>&1 || { echo "::error::sdkmanager not found; run android-actions/setup-android before this action"; exit 1; }
+          # The NDK version is owned by application-services (settings.gradle `ndkVersion`).
+          NDK_VERSION=$(curl -sSf \
+            "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/settings.gradle" \
+            | grep ndkVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
+            || true
+          test -n "$NDK_VERSION" || { echo "::error::Failed to derive ndkVersion from application-services $VERSION settings.gradle"; exit 1; }
+          echo "Installing NDK $NDK_VERSION (from application-services $VERSION)"
+          sdkmanager --install "ndk;$NDK_VERSION"
+          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
           ANDROID_NDK_VERSION=$(basename "$ANDROID_NDK" | cut -d. -f1)
           # See https://github.com/mozilla/application-services/blob/46cacda811da094653dc8e93158956f4cd57e87a/libs/build-all.sh#L89-L102
           # It figures that NSPR would require monkey-patching to build on Android.
@@ -295,7 +316,7 @@ runs:
         fi
 
     - name: Save NSS cache
-      if: ${{ steps.check_build.outputs.build_nss && github.event_name != 'pull_request' }}
+      if: ${{ inputs.cache == 'true' && steps.check_build.outputs.build_nss && github.event_name != 'pull_request' }}
       uses: actions/cache/save@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: dist

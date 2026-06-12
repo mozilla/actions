@@ -33,7 +33,8 @@
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=\"v(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)"
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]*==(?<currentValue>[0-9][0-9.]*)"
       ]
     }
   ],
