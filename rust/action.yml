@@ -114,11 +114,12 @@ runs:
         GITHUB_TOKEN: ${{ inputs.token }}
         TOOLS: ${{ inputs.tools }}
       run: |
-        # renovate: depName=cargo-bins/cargo-binstall datasource=github-releases
+        # renovate: depName=cargo-bins/cargo-binstall datasource=github-tags
         BINSTALL_VERSION=1.19.1
         BINSTALL_SHA=aaa84a43aec4955a42c5ffc65d258961e39f276e
         curl -L --proto '=https' --tlsv1.2 -sSf \
-          "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/${BINSTALL_SHA}/install-from-binstall-release.sh" | bash
+          "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/${BINSTALL_SHA}/install-from-binstall-release.sh" \
+          | BINSTALL_VERSION="$BINSTALL_VERSION" bash
 
         for tool in $(echo $TOOLS | tr "," " "); do
           cargo binstall --no-confirm "$tool" || cargo install --locked "$tool"

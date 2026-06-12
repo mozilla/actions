@@ -33,7 +33,7 @@
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=\"v(?<currentValue>[0-9][0-9.]*)\"",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)\\n\\s+[A-Z_]+=(?<currentDigest>[0-9a-f]{7,40})",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]*==(?<currentValue>[0-9][0-9.]*)"
       ]
     }
@@ -55,12 +55,6 @@
       "matchDepNames": ["nspr"],
       "prBodyNotes": [
         "⚠️ **Manual step required**: update `NSPR_SHA256` in `nss-versions.env` from the [Mozilla FTP SHA256SUMS file](https://ftp.mozilla.org/pub/nspr/releases/v{{newVersion}}/src/SHA256SUMS)"
-      ]
-    },
-    {
-      "matchDepNames": ["cargo-bins/cargo-binstall"],
-      "prBodyNotes": [
-        "⚠️ **Manual step required**: update `BINSTALL_SHA` in `rust/action.yml` with the commit SHA for the [v{{newVersion}} release tag](https://github.com/cargo-bins/cargo-binstall/releases/tag/v{{newVersion}})"
       ]
     }
   ]
