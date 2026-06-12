@@ -1,0 +1,31 @@
+# Extend __aarch64__ guards in gcm.h to cover MSVC ARM64 (_M_ARM64).
+#
+# gcm.h uses __aarch64__ in two places:
+#   1. To include <arm_neon.h> (needed for uint64x2_t).
+#   2. To declare uint64x2_t struct members in gcmHashContextStr.
+#
+# MSVC ARM64 defines _M_ARM64 instead of __aarch64__.  Without this patch
+# the struct members are absent and ghash-aarch64.c's accesses (ghash->x,
+# ghash->h) corrupt memory or fail to compile.
+#
+# Removable once NSS adds _M_ARM64 checks to gcm.h upstream.
+--- a/nss/lib/freebl/gcm.h
++++ b/nss/lib/freebl/gcm.h
+@@ -27,7 +27,7 @@
+ #endif /* NSS_DISABLE_SSE2 */
+ #endif
+ 
+-#ifdef __aarch64__
++#if defined(__aarch64__) || defined(_M_ARM64)
+ #include <arm_neon.h>
+ #endif
+ 
+@@ -82,7 +82,7 @@
+ pre_align struct gcmHashContextStr {
+ #ifdef NSS_X86_OR_X64
+     __m128i x, h;
+-#elif defined(__aarch64__)
++#elif defined(__aarch64__) || defined(_M_ARM64)
+     uint64x2_t x, h;
+ #elif defined(USE_PPC_CRYPTO)
+     vec_u64 x, h;

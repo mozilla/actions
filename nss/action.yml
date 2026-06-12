@@ -222,15 +222,27 @@ runs:
     - name: Install build dependencies (Windows)
       shell: bash
       if: ${{ runner.os == 'Windows' && steps.check_build.outputs.build_nss }}
-      run: |
+      env:
+        RUNNER_ARCH: ${{ runner.arch }}
+      run: | # zizmor: ignore[github-env]
         # shellcheck disable=SC2028
         {
           echo C:/msys64/usr/bin
-          echo C:/msys64/mingw64/bin
+          # mingw64/bin provides x86_64 MinGW toolchain binaries; not used on ARM64
+          # where the build uses MSVC exclusively.
+          [ "$RUNNER_ARCH" != "ARM64" ] && echo C:/msys64/mingw64/bin || true
         } >> "$GITHUB_PATH"
-        /c/msys64/usr/bin/pacman -S --noconfirm python3-pip nsinstall
+        mkdir -p "$HOME/bin"
+        # renovate: depName=firefox datasource=custom.firefox versioning=loose
+        curl --proto '=https' --tlsv1.2 -o "$HOME/bin/nsinstall.py" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_149_0_2_RELEASE/config/nsinstall.py
+        echo "f88df5591ee50d6e86625efd6e5f9c7b0dd4cba61e27ab533b1990115e100caf  $HOME/bin/nsinstall.py" | sha256sum -c -
+        echo "#! /usr/bin/env python3" | cat - "$HOME/bin/nsinstall.py" > "$HOME/bin/nsinstall"
+        chmod +x "$HOME/bin/nsinstall"
+        echo "$HOME/bin" >> "$GITHUB_PATH"
+        # gyp-next>=0.22.0 added Windows ARM64 target support (nodejs/gyp-next#331).
         # renovate: depName=gyp-next datasource=pypi
         echo "gyp-next==0.22.2" > req.txt
+        echo "mozfile" >> req.txt  # required by nsinstall.py
         python3 -m pip install -r req.txt
 
     - name: Set up MSVC (Windows)
@@ -238,6 +250,8 @@ runs:
       uses: ilammy/msvc-dev-cmd@v1 # zizmor: ignore[unpinned-uses]
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "ilammy/msvc-dev-cmd@v1*"
       # uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'amd64' }}
 
     - name: Set up build environment (Windows)
       shell: bash
@@ -340,6 +354,8 @@ runs:
         NSS_BUILD_FLAGS: ${{ steps.setup_env.outputs.build-flags }}
         NSS_BUILD_CFLAGS: ${{ steps.setup_env.outputs.build-cflags }}
         TARGET_PLATFORM: ${{ inputs.target }}
+        RUNNER_OS: ${{ runner.os }}
+        RUNNER_ARCH: ${{ runner.arch }}
       run: |
         [ -n "$NSS_BUILD_CFLAGS" ] && export CFLAGS="$NSS_BUILD_CFLAGS"
         if [[ $TARGET_PLATFORM == *-android* ]]; then
@@ -389,8 +405,18 @@ runs:
           # For i686-*-linux-gnu, gcc-multilib provides the 32-bit toolchain and
           # headers, and NSS_BUILD_FLAGS already carries -t ia32.
           [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
+          NSS_EXTRA=""
+          if [ "$RUNNER_OS" == "Windows" ] && [ "$RUNNER_ARCH" == "ARM64" ]; then
+            # Apply patches to NSPR and NSS for Windows ARM64 MSVC support.
+            # Each patch file can be removed individually as upstream adds support,
+            # except nss-arm64-gyp-and-aes.patch which bundles two coupled changes.
+            for p in "$GITHUB_ACTION_PATH/patches/"*.patch; do
+              patch -p1 < "$p"
+            done
+            NSS_EXTRA="--target=arm64"
+          fi
           # shellcheck disable=SC2086
-          $NSS_DIR/build.sh $NSS_BUILD_FLAGS
+          $NSS_DIR/build.sh $NSS_BUILD_FLAGS $NSS_EXTRA
         fi
 
     - name: Save NSS cache
