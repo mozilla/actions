@@ -47,6 +47,10 @@
       "extractVersion": "^v?(?<version>.+)$"
     },
     {
+      "matchDepNames": ["firefox"],
+      "versioning": "regex:^FIREFOX_(?<major>\\d+)_(?<minor>\\d+)(?:_(?<patch>\\d+))?_RELEASE$"
+    },
+    {
       "description": "Renovate releases several times a day; update at most monthly.",
       "matchDepNames": ["renovate/renovate"],
       "schedule": ["* * 1-7 * *"],

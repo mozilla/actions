@@ -150,6 +150,8 @@ Sets environment variables (when not using system NSS): `NSS_DIR`, `NSS_PREBUILT
     token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)
 ```
 
+Building NSS on Windows ARM64 requires `minimum-version` 3.130 or later.
+
 `deps-only: true` installs the per-platform NSS build toolchain (gyp everywhere, ninja
 on Linux and macOS, and nsinstall plus the MSVC and msys2 setup on Windows, which is
 expected to supply ninja itself) and sets the environment variables above, but

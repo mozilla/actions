@@ -153,6 +153,7 @@ runs:
       env:
         GITHUB_TOKEN: ${{ inputs.token }}
         TOOLS: ${{ inputs.tools }}
+        VERSION: ${{ inputs.version }}
       run: |
         # renovate: depName=cargo-bins/cargo-binstall datasource=github-tags
         BINSTALL_VERSION=1.25.1
@@ -164,7 +165,7 @@ runs:
         for tool in ${TOOLS//,/ }; do
           if [ "$tool" == "cargo-fuzz" ]; then
             # cargo-fuzz must be compiled with the same nightly toolchain used for fuzzing.
-            cargo install cargo-fuzz
+            cargo "+$VERSION" install cargo-fuzz
           elif [ "$RUNNER_OS" != "Linux" ] && [ "$tool" == "cargo-careful" ]; then
             # TODO: Remove once binary releases work on non-Linux platforms.
             cargo install --locked cargo-careful
