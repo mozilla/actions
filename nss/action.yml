@@ -25,6 +25,14 @@ inputs:
   token:
     description: "A GitHub PAT; used to avoid rate limits when fetching build scripts"
     required: false
+  java-version:
+    description: "Java version to install for Android builds"
+    default: "21"
+
+outputs:
+  ndk-version:
+    description: "Android NDK version derived from application-services (Android builds only)"
+    value: ${{ steps.android-ndk.outputs.ndk-version }}
 
 runs:
   using: composite
@@ -249,6 +257,40 @@ runs:
           echo "$NSS_OUT/lib" >> "$GITHUB_PATH"
         fi
 
+    - name: Set up Java (Android)
+      if: ${{ contains(inputs.target, '-android') }}
+      uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5.2.0
+      with:
+        distribution: zulu
+        java-version: ${{ inputs.java-version }}
+
+    - name: Set up Android SDK (Android)
+      if: ${{ contains(inputs.target, '-android') }}
+      uses: android-actions/setup-android@40fd30fb8d7440372e1316f5d1809ec01dcd3699 # v4.0.1
+      with:
+        accept-android-sdk-licenses: true
+        log-accepted-android-sdk-licenses: false
+
+    - name: Set up Android NDK (Android)
+      id: android-ndk
+      if: ${{ contains(inputs.target, '-android') }}
+      shell: bash
+      run: |
+        # renovate: depName=mozilla/application-services datasource=github-releases versioning=loose
+        APPSERVICES_VERSION="v152.0"
+        NDK_VERSION=$(curl -sSf \
+          "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$APPSERVICES_VERSION/settings.gradle" \
+          | grep ndkVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
+          || true
+        test -n "$NDK_VERSION" || { echo "::error::Failed to derive ndkVersion from application-services $APPSERVICES_VERSION settings.gradle"; exit 1; }
+        echo "Installing Android NDK $NDK_VERSION (from application-services $APPSERVICES_VERSION)"
+        sdkmanager --install "ndk;$NDK_VERSION"
+        {
+          echo "NDK_VERSION=$NDK_VERSION"
+          echo "APPSERVICES_VERSION=$APPSERVICES_VERSION"
+        } >> "$GITHUB_ENV"
+        echo "ndk-version=$NDK_VERSION" >> "$GITHUB_OUTPUT"
+
     - name: Build
       shell: bash
       if: ${{ steps.check_build.outputs.build_nss }}
@@ -261,28 +303,16 @@ runs:
         # build process doesn't provide.
         [ "$RUNNER_OS" != "Windows" ] && export CFLAGS="-ggdb3 -fno-omit-frame-pointer"
         if [[ $TARGET_PLATFORM == *-android* ]]; then
+          # Build scripts come from the same application-services release as the NDK; version
+          # is set and Renovate-tracked in the "Set up Android NDK" step above.
           # TODO: This version must also be updated when NSS versions change,
           # as the build script references library names that may change across NSS releases.
-          # renovate: depName=mozilla/application-services datasource=github-releases versioning=loose
-          VERSION="v152.0"
           for file in build-nss-android.sh build-android-common.sh; do
             curl -o "$file" -sSf \
-              "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/libs/$file"
+              "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$APPSERVICES_VERSION/libs/$file"
             chmod +x "$file"
           done
-          # sdkmanager is provided by setup-android; ANDROID_SDK_ROOT by setup-android or the runner image.
-          ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}"
-          test -n "$ANDROID_SDK_ROOT" || { echo "::error::ANDROID_SDK_ROOT/ANDROID_HOME is not set; run android-actions/setup-android before this action"; exit 1; }
-          command -v sdkmanager >/dev/null 2>&1 || { echo "::error::sdkmanager not found; run android-actions/setup-android before this action"; exit 1; }
-          # The NDK version is owned by application-services (settings.gradle `ndkVersion`).
-          NDK_VERSION=$(curl -sSf \
-            "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$VERSION/settings.gradle" \
-            | grep ndkVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
-            || true
-          test -n "$NDK_VERSION" || { echo "::error::Failed to derive ndkVersion from application-services $VERSION settings.gradle"; exit 1; }
-          echo "Installing NDK $NDK_VERSION (from application-services $VERSION)"
-          sdkmanager --install "ndk;$NDK_VERSION"
-          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
+          export ANDROID_NDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/ndk/$NDK_VERSION"
           ANDROID_NDK_VERSION=$(basename "$ANDROID_NDK" | cut -d. -f1)
           # See https://github.com/mozilla/application-services/blob/46cacda811da094653dc8e93158956f4cd57e87a/libs/build-all.sh#L89-L102
           # It figures that NSPR would require monkey-patching to build on Android.
