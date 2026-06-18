@@ -75,3 +75,5 @@ Post a single PR-level review comment summarizing the changes and any architectu
 — the PR-level comment is for observations that apply to the PR as a whole, not individual lines.
 Do not post a separate issue comment — use only the formal GitHub review. Never post review placeholders.
 Make sure all the GitHub-flavored Markdown you emit is syntactically correct.
+Always submit the review with the `COMMENT` event — never approve the pull request, request changes,
+or dismiss a review (do not use the `APPROVE`, `REQUEST_CHANGES`, or `DISMISS` events).
