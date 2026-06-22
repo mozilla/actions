@@ -277,7 +277,7 @@ runs:
       shell: bash
       run: |
         # renovate: depName=mozilla/application-services datasource=github-releases versioning=loose
-        APPSERVICES_VERSION="v152.0"
+        APPSERVICES_VERSION="v153.0"
         NDK_VERSION=$(curl -sSf \
           "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$APPSERVICES_VERSION/settings.gradle" \
           | grep ndkVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
