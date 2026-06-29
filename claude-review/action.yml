@@ -13,7 +13,7 @@ inputs:
     default: "claude-opus-4-8"
   fallback_model:
     description: Fallback Claude model if the primary model is unavailable.
-    default: "claude-sonnet-4-6[1m]"
+    default: "claude-sonnet-4-6"
   budget:
     description: Maximum budget in USD for the review.
     default: "5.00"
