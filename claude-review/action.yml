@@ -10,7 +10,7 @@ inputs:
     required: true
   model:
     description: Claude model to use for the review.
-    default: "claude-opus-4-8[1m]"
+    default: "claude-opus-4-8"
   fallback_model:
     description: Fallback Claude model if the primary model is unavailable.
     default: "claude-sonnet-4-6[1m]"
