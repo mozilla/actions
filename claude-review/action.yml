@@ -10,10 +10,10 @@ inputs:
     required: true
   model:
     description: Claude model to use for the review.
-    default: "claude-opus-4-6"
+    default: "claude-opus-4-8[1m]"
   fallback_model:
     description: Fallback Claude model if the primary model is unavailable.
-    default: "claude-sonnet-4-6"
+    default: "claude-sonnet-4-6[1m]"
   budget:
     description: Maximum budget in USD for the review.
     default: "5.00"
