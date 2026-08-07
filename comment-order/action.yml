@@ -1,0 +1,12 @@
+name: Check comment order
+description: Fail if a comment sits between an attribute and the item it annotates; comments belong above attributes.
+branding:
+  icon: align-left
+  color: blue
+
+runs:
+  using: composite
+  steps:
+    - name: Check comment order
+      shell: bash
+      run: python3 "$GITHUB_ACTION_PATH/check.py"
