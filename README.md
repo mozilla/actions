@@ -65,13 +65,13 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
-| Input               | Default             | Description                                     |
-| ------------------- | ------------------- | ----------------------------------------------- |
-| `anthropic_api_key` | _(required)_        | Anthropic API key                               |
-| `model`             | `claude-opus-4-6`   | Primary Claude model                            |
-| `fallback_model`    | `claude-sonnet-4-6` | Fallback model                                  |
-| `budget`            | `5.00`              | Max spend per review in USD                     |
-| `prompt`            | `""`                | Additional project-specific review instructions |
+| Input               | Default      | Description                                        |
+| ------------------- | ------------ | --------------------------------------------------- |
+| `anthropic_api_key` | _(required)_ | Anthropic API key                                  |
+| `model`             | `""`         | Primary Claude model (upstream default when unset) |
+| `fallback_model`    | `""`         | Fallback model (upstream default when unset)       |
+| `budget`            | `5.00`       | Max spend per review in USD                        |
+| `prompt`            | `""`         | Additional project-specific review instructions    |
 
 ### `crap` — CRAP analysis
 
