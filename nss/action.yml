@@ -317,6 +317,11 @@ runs:
           # See https://github.com/mozilla/application-services/blob/46cacda811da094653dc8e93158956f4cd57e87a/libs/build-all.sh#L89-L102
           # It figures that NSPR would require monkey-patching to build on Android.
           sed -i'' 's/if test -z "$android_ndk" ; then/$as_echo "#define ANDROID 1" >>confdefs.h\n    ;;\nunreachable)\n    if test -z "$android_ndk" ; then/g' nspr/configure
+          # build-android-common.sh points CC at the NDK clang, and NSPR's config.guess
+          # probes the build system with $CC, making it report *-linux-android. For the
+          # x86_64 target that matches the runner's own arch, so target == host and NSPR
+          # skips cross-compile setup, then fails trying to run the cross-built test binary.
+          export CC_FOR_BUILD=cc
           ./build-nss-android.sh "$(pwd)" "/tmp/dist" "$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64" "$TARGET_PLATFORM" "$ANDROID_NDK_VERSION"
           # Manually move the temporary build directory to the final location.
           find /tmp/tmp.* > tmp
