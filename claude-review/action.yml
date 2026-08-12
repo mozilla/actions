@@ -9,11 +9,15 @@ inputs:
     description: Anthropic API key.
     required: true
   model:
-    description: Claude model to use for the review.
-    default: "claude-opus-4-6"
+    description: >
+      Claude model to use for the review. Defaults to whatever
+      anthropics/claude-code-action uses.
+    default: ""
   fallback_model:
-    description: Fallback Claude model if the primary model is unavailable.
-    default: "claude-sonnet-4-6"
+    description: >
+      Fallback Claude model if the primary model is unavailable. Defaults to
+      whatever anthropics/claude-code-action uses.
+    default: ""
   budget:
     description: Maximum budget in USD for the review.
     default: "5.00"
@@ -64,7 +68,7 @@ runs:
     # With pull_request_target, checkout defaults to the base branch.
     # Check out from the PR's head repository to handle fork PRs correctly.
     - name: Checkout PR head
-      uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name }}
         ref: ${{ github.event.pull_request.head.sha }}
@@ -103,8 +107,8 @@ runs:
         # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
         # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options
         claude_args: |
-          --model ${{ inputs.model }}
-          --fallback-model ${{ inputs.fallback_model }}
+          ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
+          ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
           --allowedTools "Read(file_path:${{ github.workspace }}/**)" "Glob(path:${{ github.workspace }}/**)" "Grep(path:${{ github.workspace }}/**)"
           --allowedTools "Bash(gh pr view:*)" "Bash(gh pr list:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" "Bash(gh issue list:*)" "Bash(gh release list:*)" "Bash(gh release view:*)" "Bash(git log:*)" "Bash(git diff:*)" "Bash(git show:*)" "Bash(git blame:*)"

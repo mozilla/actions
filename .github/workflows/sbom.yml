@@ -11,6 +11,6 @@ jobs:
     permissions:
       actions: read # Required by anchore/sbom-action to read workflow run context.
       contents: write # Required to upload the SBOM as a release asset.
-    uses: mozilla/ssdlc-actions/.github/workflows/ssdlc-sbom.yml@5cc2b20e42d53d1643853f12244fbec9ed2f2e0c # untagged; pinned to a main-branch commit
+    uses: mozilla/ssdlc-actions/.github/workflows/ssdlc-sbom.yml@3baba0c5ecad02b06380a4022b813dca5f5086c3 # untagged; pinned to a main-branch commit
     with:
       sbom_name: ${{ github.event.release.tag_name || github.sha }}
