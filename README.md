@@ -66,7 +66,7 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
 ```
 
 | Input               | Default      | Description                                        |
-| ------------------- | ------------ | --------------------------------------------------- |
+| ------------------- | ------------ | -------------------------------------------------- |
 | `anthropic_api_key` | _(required)_ | Anthropic API key                                  |
 | `model`             | `""`         | Primary Claude model (upstream default when unset) |
 | `fallback_model`    | `""`         | Fallback model (upstream default when unset)       |
@@ -116,7 +116,7 @@ Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
 - uses: mozilla/actions/nss@v1
   with:
     minimum-version: "3.100" # Minimum required NSS version
-    sha256: "..." # SHA256 of the '3.100-with-nspr-<version>.tar.gz' release tarball
+    sha256: "..." # SHA256 of the 'nss-3.100-with-nspr-<version>.tar.gz' release tarball
     target: "" # Cross-compilation target (e.g. aarch64-linux-android)
     sccache: false # Whether to enable sccache for NSS compilation (default: false)
     token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)
@@ -273,7 +273,7 @@ on:
     types: [published]
   push:
     branches:
-      - 'release/**' # adjust to your release branch pattern
+      - "release/**" # adjust to your release branch pattern
   workflow_dispatch:
 
 jobs:

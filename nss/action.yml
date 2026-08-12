@@ -9,7 +9,7 @@ inputs:
     description: "Minimum required version of NSS. System NSS must be at least this version; a source build builds exactly this version."
     required: true
   sha256:
-    description: "SHA256 of the '<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball."
+    description: "SHA256 of the 'nss-<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball."
     required: true
   target:
     description: "Target for cross-compilation"
@@ -80,7 +80,8 @@ runs:
         # The tarball name encodes the bundled NSPR version, so resolve it from the
         # pinned checksum rather than guessing a filename: this also means the pin
         # is the only source of truth for which NSPR version gets built.
-        LINE=$(curl -fsSL "$RELEASE_DIR/SHA256SUMS" | grep -m1 "^${NSS_SHA256}[[:space:]]" || true)
+        SUMS=$(curl -fsSL "$RELEASE_DIR/SHA256SUMS") || { echo "::error::Failed to fetch $RELEASE_DIR/SHA256SUMS"; exit 1; }
+        LINE=$(grep -F -m1 "${NSS_SHA256} " <<< "$SUMS" || true)
         read -r _ FILENAME <<< "$LINE"
         FILENAME="${FILENAME#\*}"
         if [ -z "$FILENAME" ]; then
