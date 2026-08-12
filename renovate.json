@@ -5,22 +5,6 @@
   "dependencyDashboard": false,
   "gitAuthor": "Lars Eggert <200328+larseggert@users.noreply.github.com>",
   "enabledManagers": ["custom.regex"],
-  "customDatasources": {
-    "nss": {
-      "defaultRegistryUrlTemplate": "https://ftp.mozilla.org/pub/security/nss/releases/",
-      "format": "html",
-      "transformTemplates": [
-        "{\"releases\": releases[$match(version, /NSS_\\d+_\\d+(_\\d+)?_RTM/)].{\"version\": $replace($replace($replace(version, /^.*NSS_/, \"\"), /_RTM\\/$/, \"\"), /_/, \".\")}}"
-      ]
-    },
-    "nspr": {
-      "defaultRegistryUrlTemplate": "https://ftp.mozilla.org/pub/nspr/releases/",
-      "format": "html",
-      "transformTemplates": [
-        "{\"releases\": releases[$match(version, /v\\d+\\.\\d+/)].{\"version\": $replace($replace(version, /^(?:.*\\/)?v/, \"\"), /\\/$/, \"\")}}"
-      ]
-    }
-  },
   "customManagers": [
     {
       "description": "Pinned tool versions annotated with '# renovate: depName=X datasource=Y [versioning=Z]'",
@@ -46,22 +30,6 @@
       "prBodyNotes": [
         "⚠️ **Manual step required**: update `SHA256` in `actionlint.yml` from the [release checksums file](https://github.com/rhysd/actionlint/releases/download/v{{newVersion}}/actionlint_{{newVersion}}_checksums.txt)"
       ]
-    },
-    {
-      "matchDepNames": ["nss"],
-      "postUpgradeTasks": {
-        "commands": ["bash nss/update-sha256.sh nss {{newVersion}}"],
-        "fileFilters": ["nss/nss-versions.env"],
-        "executionMode": "update"
-      }
-    },
-    {
-      "matchDepNames": ["nspr"],
-      "postUpgradeTasks": {
-        "commands": ["bash nss/update-sha256.sh nspr {{newVersion}}"],
-        "fileFilters": ["nss/nss-versions.env"],
-        "executionMode": "update"
-      }
     },
     {
       "matchDepNames": ["cargo-bins/cargo-binstall"],
