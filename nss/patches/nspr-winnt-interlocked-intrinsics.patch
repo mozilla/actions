@@ -1,0 +1,28 @@
+# Redirect Win32 Interlocked* exports to _Interlocked* compiler intrinsics.
+#
+# On ARM64 Windows, kernel32.lib does not export the Win32 Interlocked*
+# functions as callable symbols; they are only available as compiler
+# intrinsics (underscore-prefixed).  Placing redirects immediately after
+# <windows.h> rewrites every call site in NSPR via the preprocessor:
+#
+#   - _MD_ATOMIC_* macros in _winnt.h (all builds)
+#   - _MD_LOCK lock-contention counters in _winnt.h (#ifdef PROFILE_LOCKS)
+#   - InterlockedCompareExchange called directly in ntio.c and prmwait.c
+#
+# Removable once NSPR uses compiler intrinsics unconditionally on Windows.
+--- a/nspr/pr/include/md/_winnt.h
++++ b/nspr/pr/include/md/_winnt.h
+@@ -17,6 +17,13 @@
+ #endif /* _WIN32_WINNT */
+ 
+ #include <windows.h>
++/* ARM64 kernel32.lib does not export Interlocked* as callable symbols;
++ * redirect all call sites to the equivalent compiler intrinsics. */
++#define InterlockedCompareExchange  _InterlockedCompareExchange
++#define InterlockedIncrement        _InterlockedIncrement
++#define InterlockedDecrement        _InterlockedDecrement
++#define InterlockedExchange         _InterlockedExchange
++#define InterlockedExchangeAdd      _InterlockedExchangeAdd
+ #include <winsock.h>
+ #ifdef __MINGW32__
+ #include <mswsock.h>

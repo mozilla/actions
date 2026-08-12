@@ -1,0 +1,24 @@
+# Fix CPU architecture detection in NSPR configure for Windows ARM64.
+#
+# When NSS builds NSPR with --target=arm64, nspr.sh passes
+# --host=aarch64-pc-mingw32 which activates configure's cross-compile path.
+# That path hardcoded CPU_ARCH=x86 for all mingw* targets regardless of
+# target_cpu.  Use target_cpu instead so aarch64 cross-compile targets are
+# handled correctly.
+#
+# Removable once NSPR configure handles ARM64 in the mingw* cross-compile case.
+--- a/nspr/configure
++++ b/nspr/configure
+@@ -6647,7 +6647,12 @@
+         linux*)       OS_ARCH=Linux ;;
+         solaris*)     OS_ARCH=SunOS OS_RELEASE=5 ;;
+-        mingw*)       OS_ARCH=WINNT CPU_ARCH=x86 ;;
++        mingw*)
++            OS_ARCH=WINNT
++            case "$target_cpu" in
++                aarch64) CPU_ARCH=aarch64; USE_64=1 ;;
++                *)       CPU_ARCH=x86 ;;
++            esac ;;
+         cygwin*)      OS_ARCH=WINNT ;;
+         darwin*)      OS_ARCH=Darwin ;;
+         riscos*)      OS_ARCH=RISCOS ;;

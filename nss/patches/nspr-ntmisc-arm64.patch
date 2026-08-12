@@ -1,0 +1,49 @@
+# Add MSVC ARM64 implementations for PR_StackPush and PR_StackPop in ntmisc.c.
+#
+# The existing MSVC code path uses x86 inline assembly (__asm { ... }) which
+# the ARM64 MSVC compiler does not support.  Add a _M_ARM64 branch using
+# _InterlockedExchangePointer (ARM64 compiler intrinsic, available via
+# <intrin.h> already included by _winnt.h) to implement the same spin-lock
+# semantics as the x86 xchg instruction.
+#
+# Removable once NSPR provides ARM64 implementations upstream.
+--- a/nspr/pr/src/md/windows/ntmisc.c
++++ b/nspr/pr/src/md/windows/ntmisc.c
+@@ -1075,6 +1075,15 @@
+   *(void**)stack_elem = tmp;
+   __asm__("" : : : "memory");
+   *tos = stack_elem;
++#    elif defined(_M_ARM64)
++  void* volatile* tos = (void* volatile*)stack;
++  void* tmp;
++retry:
++  if (*tos == (void*)-1) goto retry;
++  tmp = _InterlockedExchangePointer(tos, (void*)-1);
++  if (tmp == (void*)-1) goto retry;
++  *(void**)stack_elem = tmp;
++  _InterlockedExchangePointer(tos, stack_elem);
+ #    else
+   __asm
+   {
+@@ -1119,6 +1128,21 @@
+     *tos = tmp;
+   }
+ 
++  return tmp;
++#    elif defined(_M_ARM64)
++  void* volatile* tos = (void* volatile*)stack;
++  void* tmp;
++retry:
++  if (*tos == (void*)-1) goto retry;
++  tmp = _InterlockedExchangePointer(tos, (void*)-1);
++  if (tmp == (void*)-1) goto retry;
++  if (tmp != (void*)0) {
++    void* next = *(void**)tmp;
++    _InterlockedExchangePointer(tos, next);
++    *(void**)tmp = 0;
++  } else {
++    _InterlockedExchangePointer(tos, tmp);
++  }
+   return tmp;
+ #    else
+   __asm
