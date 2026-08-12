@@ -12,6 +12,10 @@ concurrency:
 permissions:
   contents: read
 
+env:
+  NSS_TEST_VERSION: "3.126"
+  NSS_TEST_SHA256: c95a4cf93d6939000642254422d71dffccb5c017d0f40733d3e2be18aa93f1be
+
 jobs:
   actionlint:
     uses: ./.github/workflows/actionlint.yml
@@ -110,8 +114,8 @@ jobs:
 
       - uses: ./nss
         with:
-          minimum-version: "3.90"
-          sha256: f78ab1d911cae8bbc94758fb3bd0f731df4087423a4ff5db271ba65381f6b739
+          minimum-version: ${{ env.NSS_TEST_VERSION }}
+          sha256: ${{ env.NSS_TEST_SHA256 }}
           cache: false
 
       - name: Verify NSS is available
@@ -183,8 +187,8 @@ jobs:
 
       - uses: ./nss
         with:
-          minimum-version: "3.90"
-          sha256: f78ab1d911cae8bbc94758fb3bd0f731df4087423a4ff5db271ba65381f6b739
+          minimum-version: ${{ env.NSS_TEST_VERSION }}
+          sha256: ${{ env.NSS_TEST_SHA256 }}
           target: ${{ matrix.target }}
           token: ${{ github.token }}
           cache: false
