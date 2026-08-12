@@ -111,6 +111,7 @@ jobs:
       - uses: ./nss
         with:
           minimum-version: "3.90"
+          sha256: f78ab1d911cae8bbc94758fb3bd0f731df4087423a4ff5db271ba65381f6b739
           cache: false
 
       - name: Verify NSS is available
@@ -183,6 +184,7 @@ jobs:
       - uses: ./nss
         with:
           minimum-version: "3.90"
+          sha256: f78ab1d911cae8bbc94758fb3bd0f731df4087423a4ff5db271ba65381f6b739
           target: ${{ matrix.target }}
           token: ${{ github.token }}
           cache: false

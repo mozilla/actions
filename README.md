@@ -116,8 +116,7 @@ Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
 - uses: mozilla/actions/nss@v1
   with:
     minimum-version: "3.100" # Minimum required NSS version
-    # OR
-    version-file: nss/min_version.txt # File containing the minimum version
+    sha256: "..." # SHA256 of the '3.100-with-nspr-<version>.tar.gz' release tarball
     target: "" # Cross-compilation target (e.g. aarch64-linux-android)
     sccache: false # Whether to enable sccache for NSS compilation (default: false)
     token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)

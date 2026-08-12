@@ -6,13 +6,11 @@ branding:
 
 inputs:
   minimum-version:
-    description: "Minimum required version of NSS. If not provided, reads from version-file."
-    required: false
-    default: ""
-  version-file:
-    description: "Path to file containing the minimum NSS version (relative to workspace root)"
-    required: false
-    default: ""
+    description: "Minimum required version of NSS. System NSS must be at least this version; a source build builds exactly this version."
+    required: true
+  sha256:
+    description: "SHA256 of the '<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball."
+    required: true
   target:
     description: "Target for cross-compilation"
     default: ""
@@ -37,22 +35,6 @@ outputs:
 runs:
   using: composite
   steps:
-    - name: Determine minimum NSS version
-      id: min-version
-      shell: bash
-      env:
-        MIN_VERSION_INPUT: ${{ inputs.minimum-version }}
-        VERSION_FILE: ${{ inputs.version-file }}
-      run: |
-        if [ -n "$MIN_VERSION_INPUT" ]; then
-          echo "minimum=$MIN_VERSION_INPUT" >> "$GITHUB_OUTPUT"
-        elif [ -n "$VERSION_FILE" ] && [ -f "$VERSION_FILE" ]; then
-          echo "minimum=$(cat "$VERSION_FILE")" >> "$GITHUB_OUTPUT"
-        else
-          echo "::error::Either minimum-version or version-file input must be provided (and the file must exist)."
-          exit 1
-        fi
-
     - name: Install system NSS (Linux)
       shell: bash
       if: ${{ runner.os == 'Linux' && inputs.target == '' }}
@@ -72,7 +54,7 @@ runs:
     - name: Check system NSS version
       id: system_nss
       env:
-        MIN_VERSION: ${{ steps.min-version.outputs.minimum }}
+        MIN_VERSION: ${{ inputs.minimum-version }}
       shell: bash
       if: ${{ runner.os != 'Windows' && inputs.target == '' }}
       run: |
@@ -88,13 +70,32 @@ runs:
       id: nss
       if: ${{ !steps.system_nss.outputs.suitable }}
       shell: bash
+      env:
+        NSS_VERSION: ${{ inputs.minimum-version }}
+        NSS_SHA256: ${{ inputs.sha256 }}
       run: |
-        # Versions and checksums are defined in nss-versions.env next to this action.
-        source "$GITHUB_ACTION_PATH/nss-versions.env"
         NSS_TAG="${NSS_VERSION//./_}"
-        NSS_URL="https://ftp.mozilla.org/pub/security/nss/releases/NSS_${NSS_TAG}_RTM/src/nss-${NSS_VERSION}.tar.gz"
-        echo "Retrieving NSS $NSS_VERSION from $NSS_URL"
-        curl -L -o nss.tar.gz "$NSS_URL"
+        RELEASE_DIR="https://ftp.mozilla.org/pub/security/nss/releases/NSS_${NSS_TAG}_RTM/src"
+
+        # The tarball name encodes the bundled NSPR version, so resolve it from the
+        # pinned checksum rather than guessing a filename: this also means the pin
+        # is the only source of truth for which NSPR version gets built.
+        LINE=$(curl -fsSL "$RELEASE_DIR/SHA256SUMS" | grep -m1 "^${NSS_SHA256}[[:space:]]" || true)
+        read -r _ FILENAME <<< "$LINE"
+        FILENAME="${FILENAME#\*}"
+        if [ -z "$FILENAME" ]; then
+          echo "::error::No artifact in NSS_${NSS_TAG}_RTM matches sha256 ${NSS_SHA256}."
+          exit 1
+        fi
+        case "$FILENAME" in
+          nss-*-with-nspr-*.tar.gz) ;;
+          *) echo "::error::Resolved artifact $FILENAME does not bundle NSPR."; exit 1 ;;
+        esac
+        NSPR_VERSION="${FILENAME#nss-*-with-nspr-}"
+        NSPR_VERSION="${NSPR_VERSION%.tar.gz}"
+
+        echo "Retrieving $FILENAME from $RELEASE_DIR/$FILENAME"
+        curl --fail -L -o nss.tar.gz "$RELEASE_DIR/$FILENAME"
         if command -v sha256sum &>/dev/null; then
           actual=$(sha256sum nss.tar.gz | cut -d' ' -f1)
         else
@@ -105,27 +106,7 @@ runs:
         tar xzf nss.tar.gz --strip-components=1
         rm nss.tar.gz
         echo "version=$NSS_VERSION" >> "$GITHUB_OUTPUT"
-
-    - name: Retrieve NSPR
-      id: nspr
-      if: ${{ !steps.system_nss.outputs.suitable }}
-      shell: bash
-      run: |
-        # Versions and checksums are defined in nss-versions.env next to this action.
-        source "$GITHUB_ACTION_PATH/nss-versions.env"
-        NSPR_URL="https://ftp.mozilla.org/pub/nspr/releases/v$NSPR_VERSION/src/nspr-$NSPR_VERSION.tar.gz"
-        echo "Retrieving NSPR $NSPR_VERSION from $NSPR_URL"
-        curl -L -o nspr.tar.gz "$NSPR_URL"
-        if command -v sha256sum &>/dev/null; then
-          actual=$(sha256sum nspr.tar.gz | cut -d' ' -f1)
-        else
-          actual=$(shasum -a 256 nspr.tar.gz | cut -d' ' -f1)
-        fi
-        echo "sha256(nspr.tar.gz): expected=$NSPR_SHA256 actual=$actual"
-        [ "$actual" = "$NSPR_SHA256" ] || { echo "Checksum mismatch!"; exit 1; }
-        tar xzf nspr.tar.gz --strip-components=1
-        rm nspr.tar.gz
-        echo "version=$NSPR_VERSION" >> "$GITHUB_OUTPUT"
+        echo "nspr-version=$NSPR_VERSION" >> "$GITHUB_OUTPUT"
 
     - name: Store Ubuntu release code name (Linux)
       id: ubuntu_release
@@ -145,7 +126,7 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist
-        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nspr.outputs.version }}
+        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}
 
     - name: Check if build is needed
       id: check_build
@@ -355,4 +336,4 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist
-        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nspr.outputs.version }}
+        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}
