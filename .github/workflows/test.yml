@@ -14,7 +14,7 @@ permissions:
 
 env:
   NSS_TEST_VERSION: "3.126"
-  NSS_TEST_SHA256: c95a4cf93d6939000642254422d71dffccb5c017d0f40733d3e2be18aa93f1be
+  NSS_TEST_SHA256: "c95a4cf93d6939000642254422d71dffccb5c017d0f40733d3e2be18aa93f1be"
 
 jobs:
   actionlint:
