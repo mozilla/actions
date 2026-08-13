@@ -29,7 +29,7 @@ outputs:
 runs:
   using: composite
   steps:
-    - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+    - uses: $/rust
       with:
         version: nightly
         tools: cargo-llvm-cov,cargo-crap
