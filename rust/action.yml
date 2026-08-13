@@ -26,6 +26,9 @@ inputs:
   rust-cache:
     description: Whether to enable Rust dependency caching via Swatinem/rust-cache
     default: "true"
+  cache-key:
+    description: Extra component for the Rust cache key, to separate jobs that would otherwise share one entry
+    default: ""
   sccache:
     description: Whether to enable sccache for Rust compilation caching
     default: "false"
@@ -33,12 +36,24 @@ inputs:
     description: Whether to make the installed toolchain the default
     default: "true"
 
+outputs:
+  cache-key:
+    description: The rust-cache shared-key this invocation would use
+    value: ${{ steps.cache-key.outputs.value }}
+  cache-hit:
+    description: Whether rust-cache restored an exact match (empty when caching is disabled)
+    value: ${{ steps.rust-cache.outputs.cache-hit }}
+
 runs:
   using: composite
   steps:
     - name: Set up environment
       shell: bash
-      run: echo "RUST_BACKTRACE=full" >> "$GITHUB_ENV"
+      run: |
+        {
+          echo "RUST_BACKTRACE=full"
+          echo "CARGO_INCREMENTAL=0" # Incremental artifacts are useless on a CI runner.
+        } >> "$GITHUB_ENV"
 
     - name: Install Rust
       shell: bash
@@ -79,19 +94,31 @@ runs:
           echo "SCCACHE_GHA_ENABLED=true"
         } >> "$GITHUB_ENV"
 
-    # Minimizes cache pressure via shared-key (one entry per OS × toolchain).
-    # Only saves on main to avoid PR cache churn. Nightly is excluded since it
-    # changes too frequently to benefit from caching.
+    - name: Compose Rust cache key
+      id: cache-key
+      shell: bash
+      env:
+        BASE: ${{ runner.os }}-${{ inputs.version }}
+        EXTRA: ${{ inputs.cache-key }}
+      run: echo "value=${BASE}${EXTRA:+-$EXTRA}" >> "$GITHUB_OUTPUT"
+
+    # One entry per OS × toolchain; pass cache-key to split that further. Saves only on
+    # the default branch: merge queue refs are deleted with the queue entry, and PR saves
+    # (restorable only within that PR) churn the 10 GB LRU budget and evict the shared
+    # entry. A workflow that never runs on the default branch therefore gets no caching.
+    # Rolling `nightly` is skipped since it rotates daily; a pinned nightly caches normally.
     # Disabled automatically when sccache is active, since they serve the same purpose.
     - name: Enable Rust cache
-      if: ${{ inputs.rust-cache == 'true' && inputs.sccache != 'true' }}
+      id: rust-cache
+      if: ${{ inputs.rust-cache == 'true' && inputs.sccache != 'true' && inputs.version != 'nightly' }}
       uses: Swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2.9.1
       with:
         cache-bin: false # Binaries are installed via binstall and don't benefit from caching
         cache-all-crates: false
         # TODO: pass workspaces input once we understand the interaction with empty values
-        shared-key: ${{ runner.os }}-${{ inputs.version }}
-        save-if: ${{ inputs.version != 'nightly' && (github.ref == format('refs/heads/{0}', github.event.repository.default_branch) || github.event.merge_group.base_ref == format('refs/heads/{0}', github.event.repository.default_branch)) }}
+        shared-key: ${{ steps.cache-key.outputs.value }}
+        # Keep in sync with the same predicate in ../nss/action.yml.
+        save-if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
 
     - name: Set up MSVC (Windows)
       if: ${{ runner.os == 'Windows' }}

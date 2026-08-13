@@ -15,6 +15,11 @@ permissions:
 env:
   NSS_TEST_VERSION: "3.126"
   NSS_TEST_SHA256: "c95a4cf93d6939000642254422d71dffccb5c017d0f40733d3e2be18aa93f1be"
+  ROUNDTRIP_CACHE_KEY: roundtrip-${{ github.run_id }}
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   actionlint:
@@ -35,9 +40,6 @@ jobs:
       matrix:
         os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -56,14 +58,103 @@ jobs:
           rustc --version
           cargo nextest --version
 
+  # test-rust passes rust-cache: false, so nothing else exercises the caching path.
+  test-rust-cache:
+    name: Test Rust action caching (cache-key=${{ matrix.cache-key || 'unset' }})
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - cache-key: ""
+            want: Linux-stable
+          - cache-key: release
+            want: Linux-stable-release
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: rust
+        uses: ./rust
+        with:
+          version: stable
+          token: ${{ github.token }}
+          cache-key: ${{ matrix.cache-key }}
+
+      - name: Verify cache key and build environment
+        env:
+          GOT: ${{ steps.rust.outputs.cache-key }}
+          WANT: ${{ matrix.want }}
+        run: |
+          [ "$GOT" = "$WANT" ] || { echo "::error::cache-key is '$GOT', want '$WANT'"; exit 1; }
+          [ "$CARGO_INCREMENTAL" = "0" ] || { echo "::error::CARGO_INCREMENTAL is '${CARGO_INCREMENTAL:-unset}', want 0"; exit 1; }
+
+  # Saving only happens on the default branch, so the round trip can only be
+  # exercised there: this job populates the cache, test-rust-cache-restore reads it.
+  test-rust-cache-save:
+    name: Populate Rust cache
+    timeout-minutes: 15
+    if: ${{ github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./rust
+        with:
+          version: stable
+          token: ${{ github.token }}
+          cache-key: ${{ env.ROUNDTRIP_CACHE_KEY }}
+
+      - run: cargo build --locked --all-features
+        working-directory: test-crate
+
+  test-rust-cache-restore:
+    name: Restore Rust cache
+    timeout-minutes: 15
+    needs: test-rust-cache-save
+    permissions:
+      contents: read
+      actions: write # Required to delete the throwaway cache entry below
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: rust
+        uses: ./rust
+        with:
+          version: stable
+          token: ${{ github.token }}
+          cache-key: ${{ env.ROUNDTRIP_CACHE_KEY }}
+
+      - name: Verify the cache was restored
+        env:
+          HIT: ${{ steps.rust.outputs.cache-hit }}
+        run: |
+          [ "$HIT" = "true" ] || { echo "::error::cache-hit is '${HIT:-empty}', want true"; exit 1; }
+
+      # actions/cache has no delete action, so use the API.
+      - name: Remove the throwaway cache entry
+        if: ${{ always() }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PREFIX: v0-rust-${{ steps.rust.outputs.cache-key }}
+        run: |
+          ids=$(gh cache list --key "$PREFIX" --json id --jq '.[].id')
+          for id in $ids; do gh cache delete "$id"; done
+          n=$(printf '%s' "$ids" | grep -c . || true)
+          [ "$n" -eq 1 ] || { echo "::error::matched $n entries for $PREFIX, want 1"; exit 1; }
+
   test-toolchains:
     name: Test toolchains action
     timeout-minutes: 5
     runs-on: ubuntu-24.04
     # cargo is pre-installed on GitHub-hosted Ubuntu runners
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -104,9 +195,6 @@ jobs:
           - windows-2022
           - windows-2025
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -167,9 +255,6 @@ jobs:
           - arm-linux-androideabi
           - x86_64-linux-android
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
