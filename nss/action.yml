@@ -333,7 +333,8 @@ runs:
         fi
 
     - name: Save NSS cache
-      if: ${{ inputs.cache == 'true' && steps.check_build.outputs.build_nss && github.event_name != 'pull_request' }}
+      # Keep in sync with the same predicate in ../rust/action.yml.
+      if: ${{ inputs.cache == 'true' && steps.check_build.outputs.build_nss && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist

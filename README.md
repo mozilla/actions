@@ -8,8 +8,9 @@ GitHub actions shared by various Mozilla projects.
 
 Installs a Rust toolchain with optional components and tools. Uses
 [`Swatinem/rust-cache`](https://github.com/Swatinem/rust-cache) to cache
-dependencies (one entry per OS × toolchain, saves only on the default branch). Handles
-MSVC setup on Windows.
+dependencies (one entry per OS × toolchain, saves only on the default branch, and not for
+rolling `nightly`). PR and merge-queue runs restore but never save, so a workflow that never
+runs on the default branch gets no caching at all. Handles MSVC setup on Windows.
 
 ```yaml
 - uses: mozilla/actions/rust
@@ -19,7 +20,8 @@ MSVC setup on Windows.
     tools: cargo-nextest # Comma- or space-separated tools (installed via cargo-binstall)
     token: ${{ github.token }} # GitHub token to avoid API rate limits
     targets: aarch64-unknown-linux-gnu # Comma-separated target triples
-    rust-cache: true # Whether to enable rust-cache (default: true; auto-disabled when sccache: true)
+    rust-cache: true # Whether to enable rust-cache (default: true; auto-disabled when sccache: true, and for rolling nightly)
+    cache-key: "" # Extra cache key component, to split jobs that would otherwise share an entry
     sccache: false # Whether to enable sccache (default: false)
     make-default: true # Whether to make this toolchain the default (default: true)
 ```
