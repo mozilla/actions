@@ -1,0 +1,7 @@
+# actionlint 1.7.12 does not know the `$/` syntax, which references an action in
+# this repository at the running commit. Matching on the `$/` prefix keeps a
+# genuinely missing `@ref` elsewhere reported.
+paths:
+  .github/workflows/**/*.{yml,yaml}:
+    ignore:
+      - 'specifying action "\$/[^"]+" in invalid format because ref is missing'

@@ -21,7 +21,7 @@ runs:
         fetch-depth: 0
         path: "semver"
 
-    - uses: mozilla/actions/rust@v1 # zizmor: ignore[unpinned-uses] - self-reference, no supply-chain risk
+    - uses: $/rust
       with:
         tools: cargo-semver-checks
         token: ${{ github.token }}

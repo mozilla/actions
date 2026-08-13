@@ -12,7 +12,7 @@ dependencies (one entry per OS × toolchain, saves only on the default branch). 
 MSVC setup on Windows.
 
 ```yaml
-- uses: mozilla/actions/rust@v1
+- uses: mozilla/actions/rust
   with:
     version: stable # Toolchain version (default: stable)
     components: clippy # Space-separated Rust components
@@ -30,7 +30,7 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 `["<msrv>", "stable", "nightly"]` for use in CI matrices.
 
 ```yaml
-- uses: mozilla/actions/toolchains@v1
+- uses: mozilla/actions/toolchains
   id: toolchains
   with:
     working-directory: . # Directory containing Cargo.toml (default: .)
@@ -59,7 +59,7 @@ Alternatively, call it as a [reusable workflow](https://docs.github.com/en/actio
 using `secrets: inherit`. Or use the composite action directly to customize model, budget, or prompt:
 
 ```yaml
-- uses: mozilla/actions/claude-review@v1
+- uses: mozilla/actions/claude-review
   with:
     anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
@@ -82,7 +82,7 @@ coverage — high-complexity, low-coverage functions score above the threshold.
 Installs nightly Rust, `cargo-llvm-cov`, and `cargo-crap` automatically.
 
 ```yaml
-- uses: mozilla/actions/crap@v1
+- uses: mozilla/actions/crap
   with:
     features: ci # Cargo features for coverage (optional)
     threshold: "30" # CRAP score threshold (default: 30)
@@ -97,7 +97,7 @@ Runs [`cargo-semver-checks`](https://github.com/obi1kenobi/cargo-semver-checks)
 against a baseline revision to catch breaking API changes.
 
 ```yaml
-- uses: mozilla/actions/semver@v1
+- uses: mozilla/actions/semver
   with:
     package: my-crate # optional; omit to check all packages
     base-ref: origin/main # optional; defaults to the PR base or default branch
@@ -113,7 +113,7 @@ Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
 (Linux), `DYLD_FALLBACK_LIBRARY_PATH` (macOS).
 
 ```yaml
-- uses: mozilla/actions/nss@v1
+- uses: mozilla/actions/nss
   with:
     minimum-version: "3.100" # Minimum required NSS version
     sha256: "..." # SHA256 of the 'nss-3.100-with-nspr-<version>.tar.gz' release tarball
@@ -129,12 +129,12 @@ action will detect this automatically and use sccache for the NSS build without 
 ## Reusable Workflows
 
 Call these from a job in your workflow using `uses:`. Workflows that depend on
-NSS require callers to run `mozilla/actions/nss@v1` in a prior step.
+NSS require callers to run `mozilla/actions/nss` in a prior step.
 
 ```yaml
 jobs:
   claude-review:
-    uses: mozilla/actions/.github/workflows/claude-review.yml@v1
+    uses: mozilla/actions/.github/workflows/claude-review.yml
     permissions:
       contents: read
       pull-requests: write
@@ -143,29 +143,29 @@ jobs:
       discussions: read
     secrets: inherit
   deny:
-    uses: mozilla/actions/.github/workflows/deny.yml@v1
+    uses: mozilla/actions/.github/workflows/deny.yml
   rustfmt:
-    uses: mozilla/actions/.github/workflows/rustfmt.yml@v1
+    uses: mozilla/actions/.github/workflows/rustfmt.yml
   machete:
-    uses: mozilla/actions/.github/workflows/machete.yml@v1
+    uses: mozilla/actions/.github/workflows/machete.yml
   actionlint:
-    uses: mozilla/actions/.github/workflows/actionlint.yml@v1
+    uses: mozilla/actions/.github/workflows/actionlint.yml
     permissions:
       contents: read
       security-events: write # Required for zizmor to upload SARIF results
   dependency-review:
     if: github.event_name == 'pull_request'
-    uses: mozilla/actions/.github/workflows/dependency-review.yml@v1
+    uses: mozilla/actions/.github/workflows/dependency-review.yml
   clippy:
-    uses: mozilla/actions/.github/workflows/clippy.yml@v1
+    uses: mozilla/actions/.github/workflows/clippy.yml
     with:
       exclude-features: gecko # optional
   sanitize:
-    uses: mozilla/actions/.github/workflows/sanitize.yml@v1
+    uses: mozilla/actions/.github/workflows/sanitize.yml
     with:
       features: ci # optional
   crap:
-    uses: mozilla/actions/.github/workflows/crap.yml@v1
+    uses: mozilla/actions/.github/workflows/crap.yml
     permissions:
       contents: read
       security-events: write # Required to upload SARIF results to GitHub
@@ -173,16 +173,16 @@ jobs:
       features: ci # optional
       threshold: 30 # optional
   mutants-pr:
-    uses: mozilla/actions/.github/workflows/mutants-pr.yml@v1
+    uses: mozilla/actions/.github/workflows/mutants-pr.yml
   mutants:
-    uses: mozilla/actions/.github/workflows/mutants.yml@v1
+    uses: mozilla/actions/.github/workflows/mutants.yml
   sbom:
-    uses: mozilla/actions/.github/workflows/sbom.yml@v1
+    uses: mozilla/actions/.github/workflows/sbom.yml
     permissions:
       actions: read # Required by anchore/sbom-action to read workflow run context.
       contents: write # Required to upload the SBOM as a release asset.
   release:
-    uses: mozilla/actions/.github/workflows/release.yml@v1
+    uses: mozilla/actions/.github/workflows/release.yml
     permissions:
       contents: write # Required to update the major version tag
     with:
@@ -284,7 +284,7 @@ on:
 
 jobs:
   sbom:
-    uses: mozilla/actions/.github/workflows/sbom.yml@v1
+    uses: mozilla/actions/.github/workflows/sbom.yml
     permissions:
       actions: read # Required by anchore/sbom-action to read workflow run context.
       contents: write # Required to upload the SBOM as a release asset.
@@ -295,7 +295,7 @@ jobs:
 Force-moves a floating major-version tag (e.g. `v1`) to point at the same commit as an
 immutable release tag (e.g. `v1.2.3`), creating the major tag if it doesn't exist yet.
 Intended for repos that publish their own actions/workflows and want consumers to be
-able to pin to a moving major-version alias, the same way this repo's own `@v1` tag
+able to pin to a moving major-version alias, the same way this repo's own major-version tag
 works. Callers typically trigger it from their own `release: published` event:
 
 ```yaml
@@ -308,23 +308,9 @@ permissions: {}
 
 jobs:
   release:
-    uses: mozilla/actions/.github/workflows/release.yml@v1
+    uses: mozilla/actions/.github/workflows/release.yml
     permissions:
       contents: write # Required to update the major version tag
     with:
       tag: ${{ github.event.release.tag_name }}
-```
-
-## Versioning
-
-Actions and workflows are versioned with `@v1` tags. Pin to a tag for stability:
-
-```yaml
-- uses: mozilla/actions/rust@v1
-```
-
-or to a specific commit SHA for reproducibility:
-
-```yaml
-- uses: mozilla/actions/rust@<sha>
 ```
