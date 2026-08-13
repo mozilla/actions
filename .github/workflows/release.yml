@@ -8,6 +8,12 @@ on: # zizmor: ignore[concurrency-limits] - release events are inherently seriali
         description: Immutable release tag to promote (e.g. v1.0.1)
         required: true
         type: string
+  workflow_call:
+    inputs:
+      tag:
+        description: Immutable release tag to promote (e.g. v1.0.1)
+        required: true
+        type: string
 
 permissions: {}
 
@@ -35,13 +41,11 @@ jobs:
           fi
           echo "Release SHA: $SHA"
 
-          # Point both the immutable tag and the major version tag at the release commit.
-          for REF in "$TAG" "$MAJOR"; do
-            gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$REF" \
-              -X PATCH --field sha="$SHA" --field force=true \
-            || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
-              --field ref="refs/tags/$REF" --field sha="$SHA"
-          done
+          # Point the major version tag at the release commit.
+          gh api "repos/$GITHUB_REPOSITORY/git/refs/tags/$MAJOR" \
+            -X PATCH --field sha="$SHA" --field force=true \
+          || gh api "repos/$GITHUB_REPOSITORY/git/refs" \
+            --field ref="refs/tags/$MAJOR" --field sha="$SHA"
 
   sbom:
     name: SBOM

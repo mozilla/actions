@@ -181,6 +181,12 @@ jobs:
     permissions:
       actions: read # Required by anchore/sbom-action to read workflow run context.
       contents: write # Required to upload the SBOM as a release asset.
+  release:
+    uses: mozilla/actions/.github/workflows/release.yml@v1
+    permissions:
+      contents: write # Required to update the major version tag
+    with:
+      tag: ${{ github.event.release.tag_name }}
 ```
 
 ### `claude-review.yml` — Claude Code Review
@@ -282,6 +288,31 @@ jobs:
     permissions:
       actions: read # Required by anchore/sbom-action to read workflow run context.
       contents: write # Required to upload the SBOM as a release asset.
+```
+
+### `release.yml` — Update major version tag
+
+Force-moves a floating major-version tag (e.g. `v1`) to point at the same commit as an
+immutable release tag (e.g. `v1.2.3`), creating the major tag if it doesn't exist yet.
+Intended for repos that publish their own actions/workflows and want consumers to be
+able to pin to a moving major-version alias, the same way this repo's own `@v1` tag
+works. Callers typically trigger it from their own `release: published` event:
+
+```yaml
+name: Release
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  release:
+    uses: mozilla/actions/.github/workflows/release.yml@v1
+    permissions:
+      contents: write # Required to update the major version tag
+    with:
+      tag: ${{ github.event.release.tag_name }}
 ```
 
 ## Versioning
