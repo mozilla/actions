@@ -1,5 +1,7 @@
 name: SBOM
-on: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility
+on:
+  release: # zizmor: ignore[concurrency-limits] - release events are inherently serialised
+    types: [published]
   workflow_call:
   workflow_dispatch:
 
