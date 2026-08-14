@@ -54,6 +54,7 @@ runs:
           echo "You are reviewing pull request #${PR_NUMBER} in repository ${REPOSITORY}."
           echo "IMPORTANT: Post all review comments exclusively to pull request #${PR_NUMBER}."
           echo "You may read other pull requests for context, but do not post comments to them."
+          echo "The workspace's Claude configuration was replaced with the base branch's, so use the pull request diff tools rather than git diff for the changes under review."
           echo ""
           cat "$ACTION_PATH/prompt.md"
           if [[ -n "$EXTRA_PROMPT" ]]; then
@@ -65,16 +66,52 @@ runs:
           echo "$DELIM"
         } >> "$GITHUB_OUTPUT"
 
+    # Check that the author can push here.
+    - name: Check that PR author is trusted
+      id: trust
+      shell: bash
+      env:
+        AUTHOR: ${{ github.event.pull_request.user.login }}
+        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        GH_TOKEN: ${{ github.token }}
+      run: |
+        if [ -z "$AUTHOR" ] || [ -z "$HEAD_REPO" ]; then
+          echo "::error::No pull request author or head repository in the event payload," \
+            "so trust can't be established."
+          exit 1
+        fi
+        if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
+          echo "trusted=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        if ! PERM="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" \
+          --jq .permission 2>"$RUNNER_TEMP/gh-err")"; then
+          echo "::error::Can't read the permission of $AUTHOR on $GITHUB_REPOSITORY:" \
+            "$(cat "$RUNNER_TEMP/gh-err")"
+          exit 1
+        fi
+        case "$PERM" in
+        admin | write) echo "trusted=true" >> "$GITHUB_OUTPUT" ;;
+        *)
+          echo "::notice::Not reviewing a pull request from $AUTHOR, who has $PERM access."
+          echo "trusted=false" >> "$GITHUB_OUTPUT"
+          ;;
+        esac
+
     # With pull_request_target, checkout defaults to the base branch.
     # Check out from the PR's head repository to handle fork PRs correctly.
     - name: Checkout PR head
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         repository: ${{ github.event.pull_request.head.repo.full_name }}
         ref: ${{ github.event.pull_request.head.sha }}
         persist-credentials: false
+        # The author is checked above. Risks: https://gh.io/securely-using-pull_request_target
+        allow-unsafe-pr-checkout: true
 
-    - name: Restore trusted instruction files from base branch
+    - name: Take Claude's configuration from the base branch
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
       shell: bash
       env:
         BASE_REPO: ${{ github.repository }}
@@ -87,40 +124,53 @@ runs:
         AUTH_HEADER="$(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 | tr -d '\n')"
         git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic $AUTH_HEADER"
         trap 'git config --local --unset "http.https://github.com/.extraheader" 2>/dev/null || true' EXIT
-        git fetch --depth=1 "https://github.com/$BASE_REPO" "$BASE_SHA"
-        # Restore .github/copilot-instructions.md from the trusted base branch version.
-        # If it doesn't exist on the base branch, remove any PR version to prevent
-        # a newly added file from influencing the review.
+        git fetch --depth=1 --no-recurse-submodules "https://github.com/$BASE_REPO" "$BASE_SHA"
+        rm -rf -- .github/copilot-instructions.md .mcp.json
         if git cat-file -e "FETCH_HEAD:.github/copilot-instructions.md" 2>/dev/null; then
           git checkout FETCH_HEAD -- .github/copilot-instructions.md
-        else
-          rm -f -- .github/copilot-instructions.md
+        fi
+        # Prune for security
+        find . -name .git -prune -o -name .claude -prune -print0 | xargs -0r rm -rf --
+        find . -name .git -prune -o \
+          \( -name AGENTS.md -o -name CLAUDE.md -o -name CLAUDE.local.md \) -prune -print0 |
+          xargs -0r rm -rf --
+        # Restoring a pathspec the base branch doesn't have fails, so check first.
+        TREE="$(git ls-tree -r --name-only FETCH_HEAD)"
+        if grep -q -e '^\.claude/' -e '/\.claude/' <<<"$TREE"; then
+          git checkout FETCH_HEAD -- ':(glob)**/.claude/**'
         fi
 
     - name: Run Claude Code Review
       id: claude
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "anthropics/claude-code-action@v1"
       uses: anthropics/claude-code-action@v1 # zizmor: ignore[unpinned-uses]
       with:
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
         github_token: ${{ github.token }}
         # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
-        # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options
+        # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options.
+        # Project settings come from the base branch, restored above; local settings and
+        # any .mcp.json in the workspace are ignored.
         claude_args: |
+          --setting-sources user,project
+          --strict-mcp-config
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
+          --allowedTools Skill
           --allowedTools "Read(file_path:${{ github.workspace }}/**)" "Glob(path:${{ github.workspace }}/**)" "Grep(path:${{ github.workspace }}/**)"
           --allowedTools "Bash(gh pr view:*)" "Bash(gh pr list:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" "Bash(gh issue list:*)" "Bash(gh release list:*)" "Bash(gh release view:*)" "Bash(git log:*)" "Bash(git diff:*)" "Bash(git show:*)" "Bash(git blame:*)"
           --allowedTools mcp__github_inline_comment__create_inline_comment
           --allowedTools mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__delete_pending_pull_request_review,mcp__github__create_and_submit_pull_request_review,mcp__github__add_reply_to_pull_request_comment
           --allowedTools mcp__github__pull_request_read,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__list_pull_requests,mcp__github__search_pull_requests
-          --allowedTools mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_discussions,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__list_discussion_categories,mcp__github__get_label,mcp__github__list_labels
+          --allowedTools mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_discussions,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__list_discussion_categories,mcp__github__get_label,mcp__github__list_label
           --allowedTools mcp__github__get_commit,mcp__github__list_commits,mcp__github__get_me,mcp__github__get_workflow_run,mcp__github__list_workflow_runs,mcp__github__list_workflow_jobs,mcp__github__search_code,mcp__github__search_repositories
           --allowedTools mcp__github__get_file_contents,mcp__github__get_repository_tree,mcp__github__list_branches,mcp__github__list_releases,mcp__github__get_latest_release,mcp__github__list_tags,mcp__github__get_tag
         prompt: ${{ steps.prompt.outputs.content }}
 
     - name: Check review outcome
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
       shell: bash
       env:
         CONCLUSION: ${{ steps.claude.outputs.conclusion }}

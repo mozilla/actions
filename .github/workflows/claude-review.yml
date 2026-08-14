@@ -1,6 +1,6 @@
 name: Claude Code Review
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] Only runs for repo members/collaborators.
+  pull_request_target: # zizmor: ignore[dangerous-triggers] Only authors with write access are reviewed; fork code is not executed.
     types: [opened, synchronize, ready_for_review, reopened]
   workflow_call: # zizmor: ignore[concurrency-limits] - concurrency is the caller's responsibility.
     secrets:
@@ -16,9 +16,7 @@ jobs:
     name: Claude Code Review
     if: >-
       !github.event.pull_request.draft &&
-      github.event.pull_request.user.type != 'Bot' &&
-      contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'),
-               github.event.pull_request.author_association)
+      github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-24.04
     permissions:
       contents: read

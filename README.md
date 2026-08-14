@@ -46,8 +46,16 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to perform an AI-assisted code review on a pull
-request. Posts inline comments and a PR-level summary via the GitHub review API. Only runs
-for pull requests whose author is an `OWNER`, `MEMBER`, or `COLLABORATOR` of the repository.
+request. Posts inline comments and a PR-level summary via the GitHub review API. A pull
+request from a fork is reviewed only if its author has write access, because reviewing one
+means checking out its code; other pull requests are skipped and the workflow still
+succeeds, without posting a review.
+
+Claude takes `.claude` (settings, skills, agents, commands) and
+`.github/copilot-instructions.md` from the base branch rather than from the pull request,
+and ignores `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json` entirely. Use
+`.github/copilot-instructions.md` on the base branch, or the `prompt` input, for
+project-specific instructions.
 
 > [!NOTE]
 > Requires an `ANTHROPIC_API_KEY` repository secret.
