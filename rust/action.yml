@@ -98,11 +98,22 @@ runs:
       id: cache-key
       shell: bash
       env:
-        BASE: ${{ runner.os }}-${{ inputs.version }}
+        BASE: ${{ runner.os }}
+        HOSTED: ${{ runner.environment == 'github-hosted' }}
+        VERSION: ${{ inputs.version }}
         EXTRA: ${{ inputs.cache-key }}
-      run: echo "value=${BASE}${EXTRA:+-$EXTRA}" >> "$GITHUB_OUTPUT"
+      run: |
+        IMAGE="${ImageOS:-}"
+        if [ -z "$IMAGE" ]; then
+          if [ "$HOSTED" = "true" ]; then
+            echo "::warning::ImageOS is unset, this will cause Rust cache key collisions."
+          fi
+          IMAGE="$BASE"
+        fi
+        echo "value=${IMAGE}-${VERSION}${EXTRA:+-$EXTRA}" >> "$GITHUB_OUTPUT"
 
-    # One entry per OS × toolchain; pass cache-key to split that further. Saves only on
+    # One entry per runner image × toolchain, with rust-cache adding the target triple that
+    # ImageOS leaves out; pass cache-key to split that further. Saves only on
     # the default branch: merge queue refs are deleted with the queue entry, and PR saves
     # (restorable only within that PR) churn the 10 GB LRU budget and evict the shared
     # entry. A workflow that never runs on the default branch therefore gets no caching.
