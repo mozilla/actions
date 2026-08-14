@@ -319,3 +319,26 @@ jobs:
         run: |
           echo "NSS_DIR=$NSS_DIR"
           ls dist/Release/lib/*.a
+
+  test-nss-i686:
+    name: Test NSS action (i686)
+    timeout-minutes: 60
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: ./nss
+        with:
+          minimum-version: ${{ env.NSS_TEST_VERSION }}
+          sha256: ${{ env.NSS_TEST_SHA256 }}
+          target: i686-unknown-linux-gnu
+          token: ${{ github.token }}
+          cache: false
+
+      - name: Verify NSS is 32-bit
+        run: |
+          echo "NSS_DIR=$NSS_DIR"
+          ls dist/Release/lib/*.a
+          file dist/Release/lib/*.so | tee /dev/stderr | grep -q 'Intel 80386'

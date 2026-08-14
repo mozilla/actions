@@ -172,7 +172,15 @@ runs:
       if: ${{ runner.os == 'Linux' && steps.check_build.outputs.build_nss }}
       env:
         DEBIAN_FRONTEND: noninteractive
-      run: sudo apt-get install -y --no-install-recommends gyp ninja-build
+        TARGET_PLATFORM: ${{ inputs.target }}
+      run: |
+        [ "$APT_UPDATED" ] || { sudo apt-get update && echo "APT_UPDATED=1" >> "$GITHUB_ENV"; }
+        PACKAGES=(gyp ninja-build)
+        if [[ "$TARGET_PLATFORM" == i686-*-linux-gnu ]]; then
+          # g++-multilib pulls in gcc-multilib; lib32z1-dev is the 32-bit zlib.
+          PACKAGES+=(g++-multilib lib32z1-dev)
+        fi
+        sudo apt-get install -y --no-install-recommends "${PACKAGES[@]}"
 
     - name: Install build dependencies (MacOS)
       shell: bash
@@ -327,6 +335,14 @@ runs:
           LIB_DIR="$(dirname $LIBNSPR4)"
           mkdir -p "dist/Release/lib"
           cp -vaL "$LIB_DIR"/* "dist/Release/lib"
+        elif [[ $TARGET_PLATFORM == i686-*-linux-gnu ]]; then
+          # 32-bit build on a 64-bit host: gcc-multilib provides the 32-bit
+          # toolchain and headers, and `-t ia32` sets `-Dtarget_arch=ia32`.
+          [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
+          $NSS_DIR/build.sh -g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static -t ia32
+        elif [[ $TARGET_PLATFORM == i?86-* ]]; then
+          echo "::error::Unsupported 32-bit x86 target: $TARGET_PLATFORM (only i686-*-linux-gnu is handled)"
+          exit 1
         else
           [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
           $NSS_DIR/build.sh -g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static
