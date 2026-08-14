@@ -267,6 +267,19 @@ jobs:
   sanitize:
     uses: ./.github/workflows/sanitize.yml
 
+  comment-order:
+    name: Test comment-order action
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          persist-credentials: false
+
+      - uses: ./comment-order
+
   crap:
     uses: ./.github/workflows/crap.yml
     permissions:
