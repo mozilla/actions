@@ -46,6 +46,7 @@ jobs:
           persist-credentials: false
 
       - uses: ./rust
+        id: rust
         with:
           version: stable
           tools: cargo-nextest
@@ -53,24 +54,33 @@ jobs:
           rust-cache: false
 
       - name: Verify installation
+        env:
+          GOT: ${{ steps.rust.outputs.cache-key }}
         run: |
+          [ "$GOT" = "${ImageOS}-stable" ] || { echo "::error::cache-key is '$GOT', want '${ImageOS}-stable'"; exit 1; }
           cargo --version
           rustc --version
           cargo nextest --version
 
   # test-rust passes rust-cache: false, so nothing else exercises the caching path.
   test-rust-cache:
-    name: Test Rust action caching (cache-key=${{ matrix.cache-key || 'unset' }})
+    name: Test Rust action caching (${{ matrix.os }}, cache-key=${{ matrix.cache-key || 'unset' }})
     timeout-minutes: 10
     strategy:
       fail-fast: false
       matrix:
         include:
-          - cache-key: ""
-            want: Linux-stable
-          - cache-key: release
-            want: Linux-stable-release
-    runs-on: ubuntu-24.04
+          - os: ubuntu-24.04
+            cache-key: ""
+            want: ubuntu24-stable
+          - os: ubuntu-24.04
+            cache-key: release
+            want: ubuntu24-stable-release
+          # A second image of the same OS, which used to share an entry with the first.
+          - os: ubuntu-22.04
+            cache-key: ""
+            want: ubuntu22-stable
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -90,6 +100,33 @@ jobs:
         run: |
           [ "$GOT" = "$WANT" ] || { echo "::error::cache-key is '$GOT', want '$WANT'"; exit 1; }
           [ "$CARGO_INCREMENTAL" = "0" ] || { echo "::error::CARGO_INCREMENTAL is '${CARGO_INCREMENTAL:-unset}', want 0"; exit 1; }
+
+  # Self-hosted runners don't set ImageOS, so check the fallback that covers them.
+  # rust-cache is off because only the composed key matters here, and a key that no
+  # hosted runner produces shouldn't take up a cache entry.
+  test-rust-cache-no-imageos:
+    name: Test Rust action caching (no ImageOS)
+    timeout-minutes: 10
+    runs-on: ubuntu-24.04
+    env:
+      ImageOS: ""
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - id: rust
+        uses: ./rust
+        with:
+          version: stable
+          token: ${{ github.token }}
+          rust-cache: false
+
+      - name: Verify the cache key falls back to the runner OS
+        env:
+          GOT: ${{ steps.rust.outputs.cache-key }}
+        run: |
+          [ "$GOT" = "Linux-stable" ] || { echo "::error::cache-key is '$GOT', want 'Linux-stable'"; exit 1; }
 
   # Saving only happens on the default branch, so the round trip can only be
   # exercised there: this job populates the cache, test-rust-cache-restore reads it.
