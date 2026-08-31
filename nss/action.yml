@@ -49,7 +49,7 @@ runs:
       if: ${{ runner.os == 'MacOS' && inputs.target == '' }}
       run: |
         [ "$BREW_UPDATED" ] || brew update && echo "BREW_UPDATED=1" >> "$GITHUB_ENV"
-        brew install nss
+        brew install nss || echo "::notice::Homebrew NSS unavailable; building from source"
 
     - name: Check system NSS version
       id: system_nss
@@ -58,7 +58,7 @@ runs:
       shell: bash
       if: ${{ runner.os != 'Windows' && inputs.target == '' }}
       run: |
-        nss_version=$(pkg-config --modversion nss 2>/dev/null)
+        nss_version=$(pkg-config --modversion nss 2>/dev/null) || true
         if ! pkg-config --atleast-version "$MIN_VERSION" nss; then
           echo "System NSS needs ${MIN_VERSION}, got ${nss_version:-pkg-config error}"
           exit 0
