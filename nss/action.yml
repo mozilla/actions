@@ -6,14 +6,17 @@ branding:
 
 inputs:
   minimum-version:
-    description: "Minimum required version of NSS. System NSS must be at least this version; a source build builds exactly this version."
-    required: true
+    description: "Minimum required version of NSS, unless 'deps-only'. System NSS must be at least this version; a source build builds exactly this version."
+    default: ""
   sha256:
-    description: "SHA256 of the 'nss-<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball."
-    required: true
+    description: "SHA256 of the 'nss-<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball, unless 'deps-only'."
+    default: ""
   target:
     description: "Target for cross-compilation"
     default: ""
+  deps-only:
+    description: "Install the NSS build toolchain but acquire no NSS, for callers that build their own checkout."
+    default: "false"
   cache:
     description: "Whether to cache the NSS build artifacts"
     default: "true"
@@ -35,9 +38,34 @@ outputs:
 runs:
   using: composite
   steps:
+    # Turn the conditional requirements into loud failures here, rather than an
+    # empty version 404ing on the release URL further down.
+    - name: Validate inputs
+      shell: bash
+      env:
+        DEPS_ONLY: ${{ inputs.deps-only }}
+        MIN_VERSION: ${{ inputs.minimum-version }}
+        SHA256: ${{ inputs.sha256 }}
+        TARGET_PLATFORM: ${{ inputs.target }}
+      run: |
+        if [ "$DEPS_ONLY" != "true" ]; then
+          [ -n "$MIN_VERSION" ] && [ -n "$SHA256" ] ||
+            { echo "::error::minimum-version and sha256 are required unless deps-only is true"; exit 1; }
+        fi
+        # Build does not run in deps-only mode, so vet the target here instead.
+        case "$TARGET_PLATFORM" in
+          *-android*) # Android does its own 32-bit handling, but not via build.sh.
+            [ "$DEPS_ONLY" != "true" ] ||
+              { echo "::error::deps-only does not support Android targets, which do not go through build.sh"; exit 1; } ;;
+          i686-*-linux-gnu) ;;
+          i?86-*)
+            echo "::error::Unsupported 32-bit x86 target: $TARGET_PLATFORM (only i686-*-linux-gnu is handled)"
+            exit 1 ;;
+        esac
+
     - name: Install system NSS (Linux)
       shell: bash
-      if: ${{ runner.os == 'Linux' && inputs.target == '' }}
+      if: ${{ runner.os == 'Linux' && inputs.target == '' && inputs.deps-only != 'true' }}
       env:
         DEBIAN_FRONTEND: noninteractive
       run: |
@@ -46,7 +74,7 @@ runs:
 
     - name: Install system NSS (MacOS)
       shell: bash
-      if: ${{ runner.os == 'MacOS' && inputs.target == '' }}
+      if: ${{ runner.os == 'MacOS' && inputs.target == '' && inputs.deps-only != 'true' }}
       run: |
         [ "$BREW_UPDATED" ] || brew update && echo "BREW_UPDATED=1" >> "$GITHUB_ENV"
         brew install nss || echo "::notice::Homebrew NSS unavailable; building from source"
@@ -56,7 +84,7 @@ runs:
       env:
         MIN_VERSION: ${{ inputs.minimum-version }}
       shell: bash
-      if: ${{ runner.os != 'Windows' && inputs.target == '' }}
+      if: ${{ runner.os != 'Windows' && inputs.target == '' && inputs.deps-only != 'true' }}
       run: |
         nss_version=$(pkg-config --modversion nss 2>/dev/null) || true
         if ! pkg-config --atleast-version "$MIN_VERSION" nss; then
@@ -68,7 +96,7 @@ runs:
 
     - name: Retrieve NSS
       id: nss
-      if: ${{ !steps.system_nss.outputs.suitable }}
+      if: ${{ !steps.system_nss.outputs.suitable && inputs.deps-only != 'true' }}
       shell: bash
       env:
         NSS_VERSION: ${{ inputs.minimum-version }}
@@ -123,13 +151,13 @@ runs:
     # Downside: PRs that change NSS version/build will rebuild on every CI run.
     - name: Restore NSS cache
       id: cache
-      if: ${{ inputs.cache == 'true' && !steps.system_nss.outputs.suitable }}
+      if: ${{ inputs.cache == 'true' && !steps.system_nss.outputs.suitable && inputs.deps-only != 'true' }}
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist
         key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}
 
-    - name: Check if build is needed
+    - name: Check if the build toolchain is needed
       id: check_build
       if: ${{ !steps.system_nss.outputs.suitable }}
       env:
@@ -137,7 +165,7 @@ runs:
       shell: bash
       run: |
         if [ "$CACHE_HIT" != "true" ]; then
-          echo "Building NSS from source"
+          echo "Build toolchain needed"
           echo "build_nss=1" >> "$GITHUB_OUTPUT"
         else
           echo "Using cached prebuilt NSS"
@@ -228,21 +256,42 @@ runs:
         rm /usr/bin/link.exe || true
 
     - name: Set up environment
+      id: setup_env
       shell: bash
       if: ${{ !steps.system_nss.outputs.suitable }}
       env:
         NSS_DIR: ${{ github.workspace }}/nss
         RUNNER_OS: ${{ runner.os }}
+        TARGET_PLATFORM: ${{ inputs.target }}
         WORKSPACE: ${{ github.workspace }}
       run:
         | # zizmor: ignore[github-env] We need to write to GITHUB_PATH on Windows.
         NSS_OUT="$WORKSPACE/dist/Release"
+        # build.sh defaults target_arch to the host, so set it for the one
+        # cross-arch target supported here.
+        IA32=""
+        [[ $TARGET_PLATFORM == i686-*-linux-gnu ]] && IA32=" -t ia32"
+        # An optimized build still wants debug symbols and frame pointers, for
+        # accurate CPU profiling. Not named CFLAGS, so it doesn't reach the rest
+        # of the job; Build and deps-only callers export it around build.sh.
+        CFLAGS_FOR_NSS=""
+        [ "$RUNNER_OS" != "Windows" ] && CFLAGS_FOR_NSS="-ggdb3 -fno-omit-frame-pointer"
+        # The Build step below and any deps-only caller driving build.sh
+        # themselves must agree on how NSS gets built.
+        FLAGS="-g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static$IA32"
         {
           echo "LD_LIBRARY_PATH=$NSS_OUT/lib"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$NSS_OUT/lib"
           echo "NSS_DIR=$NSS_DIR"
           echo "NSS_PREBUILT=1"
+          echo "NSS_BUILD_FLAGS=$FLAGS"
+          echo "NSS_BUILD_CFLAGS=$CFLAGS_FOR_NSS"
         } >> "$GITHUB_ENV"
+        # Also as outputs, so that Build below cannot pick up ambient values.
+        {
+          echo "build-flags=$FLAGS"
+          echo "build-cflags=$CFLAGS_FOR_NSS"
+        } >> "$GITHUB_OUTPUT"
         if [ "$RUNNER_OS" == "Windows" ]; then
           echo "$NSS_OUT/lib" >> "$GITHUB_PATH"
         fi
@@ -283,15 +332,13 @@ runs:
 
     - name: Build
       shell: bash
-      if: ${{ steps.check_build.outputs.build_nss }}
+      if: ${{ steps.check_build.outputs.build_nss && inputs.deps-only != 'true' }}
       env:
+        NSS_BUILD_FLAGS: ${{ steps.setup_env.outputs.build-flags }}
+        NSS_BUILD_CFLAGS: ${{ steps.setup_env.outputs.build-cflags }}
         TARGET_PLATFORM: ${{ inputs.target }}
-        RUNNER_OS: ${{ runner.os }}
       run: |
-        # We want to do an optimized build for accurate CPU profiling, but
-        # we also want debug symbols and frame pointers for that, which the normal optimized NSS
-        # build process doesn't provide.
-        [ "$RUNNER_OS" != "Windows" ] && export CFLAGS="-ggdb3 -fno-omit-frame-pointer"
+        [ -n "$NSS_BUILD_CFLAGS" ] && export CFLAGS="$NSS_BUILD_CFLAGS"
         if [[ $TARGET_PLATFORM == *-android* ]]; then
           # Build scripts come from the same application-services release as the NDK; version
           # is set and Renovate-tracked in the "Set up Android NDK" step above.
@@ -335,22 +382,17 @@ runs:
           LIB_DIR="$(dirname $LIBNSPR4)"
           mkdir -p "dist/Release/lib"
           cp -vaL "$LIB_DIR"/* "dist/Release/lib"
-        elif [[ $TARGET_PLATFORM == i686-*-linux-gnu ]]; then
-          # 32-bit build on a 64-bit host: gcc-multilib provides the 32-bit
-          # toolchain and headers, and `-t ia32` sets `-Dtarget_arch=ia32`.
-          [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
-          $NSS_DIR/build.sh -g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static -t ia32
-        elif [[ $TARGET_PLATFORM == i?86-* ]]; then
-          echo "::error::Unsupported 32-bit x86 target: $TARGET_PLATFORM (only i686-*-linux-gnu is handled)"
-          exit 1
         else
+          # For i686-*-linux-gnu, gcc-multilib provides the 32-bit toolchain and
+          # headers, and NSS_BUILD_FLAGS already carries -t ia32.
           [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
-          $NSS_DIR/build.sh -g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static
+          # shellcheck disable=SC2086
+          $NSS_DIR/build.sh $NSS_BUILD_FLAGS
         fi
 
     - name: Save NSS cache
       # Keep in sync with the same predicate in ../rust/action.yml.
-      if: ${{ inputs.cache == 'true' && steps.check_build.outputs.build_nss && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
+      if: ${{ inputs.cache == 'true' && steps.check_build.outputs.build_nss && inputs.deps-only != 'true' && github.ref == format('refs/heads/{0}', github.event.repository.default_branch) }}
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist

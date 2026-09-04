@@ -252,6 +252,58 @@ jobs:
             echo "Using system NSS: $(pkg-config --modversion nss)"
           fi
 
+  test-nss-deps-only:
+    name: Test NSS action (deps-only, ${{ matrix.target || matrix.os }})
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: macos-15
+          - os: windows-2025
+          # The one deps-only path where NSS_BUILD_FLAGS varies.
+          - os: ubuntu-24.04
+            target: i686-unknown-linux-gnu
+    runs-on: ${{ matrix.os }}
+    env:
+      TARGET: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: $/nss
+        with:
+          deps-only: true
+          target: ${{ matrix.target }}
+
+      - name: Verify the toolchain and environment are set up, but no NSS was acquired
+        run: |
+          # build.sh needs all of these afterwards, whether this action installed
+          # them or the runner image did. Presence only: Ubuntu's gyp predates
+          # gyp-next and has no --version.
+          command -v gyp
+          command -v ninja
+          [ "$RUNNER_OS" != "Windows" ] || command -v nsinstall
+          [ -n "$NSS_BUILD_FLAGS" ] || { echo "::error::NSS_BUILD_FLAGS is unset"; exit 1; }
+          # build.sh would otherwise default target_arch to the host.
+          case "$NSS_BUILD_FLAGS" in
+            *"-t ia32"*) [ -n "$TARGET" ] || { echo "::error::-t ia32 set without a target"; exit 1; } ;;
+            *) [ -z "$TARGET" ] || { echo "::error::-t ia32 missing for $TARGET"; exit 1; } ;;
+          esac
+          # GCC-style flags would break the MSVC build, so they must not be set there.
+          if [ "$RUNNER_OS" == "Windows" ]; then
+            [ -z "$NSS_BUILD_CFLAGS" ] || { echo "::error::NSS_BUILD_CFLAGS is set on Windows"; exit 1; }
+          else
+            [ -n "$NSS_BUILD_CFLAGS" ] || { echo "::error::NSS_BUILD_CFLAGS is unset"; exit 1; }
+          fi
+          [ "$NSS_DIR" = "$GITHUB_WORKSPACE/nss" ] || { echo "::error::NSS_DIR is '$NSS_DIR'"; exit 1; }
+          # $NSS_DIR is this repository's own nss/ directory here, so look for a
+          # file only an NSS checkout would have.
+          [ ! -e "$NSS_DIR/build.sh" ] || { echo "::error::NSS was retrieved into $NSS_DIR"; exit 1; }
+          [ ! -d dist ] || { echo "::error::dist/ exists, so NSS was built"; exit 1; }
+
   clippy:
     uses: ./.github/workflows/clippy.yml
 
