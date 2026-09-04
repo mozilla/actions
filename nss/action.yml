@@ -243,13 +243,15 @@ runs:
       shell: bash
       if: ${{ runner.os == 'Windows' && steps.check_build.outputs.build_nss }}
       run: |
-        # Work around NSS's coreconf/msvc.sh bug with MSVC 18 (VS 2026):
-        # Set VSPATH so msvc.sh skips its setup branch, and configure the gyp overrides ourselves.
-        if [ "${VSCMD_VER%%.*}" = "18" ]; then
+        # VSPATH stops NSS's msvc.sh redoing MSVC setup and overwriting these.
+        case "${VSCMD_VER%%.*}" in 17) YEAR=2022 ;; 18) YEAR=2026 ;; *) YEAR= ;; esac
+        if [ -z "$YEAR" ]; then
+          echo "::warning::No gyp product year for MSVC '$VSCMD_VER'; leaving NSS to set up MSVC"
+        else
           {
             echo "VSPATH=$VSINSTALLDIR"
             echo "GYP_MSVS_OVERRIDE_PATH=$VSINSTALLDIR"
-            echo "GYP_MSVS_VERSION=2026"
+            echo "GYP_MSVS_VERSION=$YEAR"
           } >> "$GITHUB_ENV"
         fi
         # See https://github.com/ilammy/msvc-dev-cmd#name-conflicts-with-shell-bash
