@@ -119,8 +119,9 @@ Installs Mozilla's Network Security Services (NSS) library. Uses the system
 package if it meets the minimum version requirement; otherwise downloads and
 builds from source with caching.
 
-Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
-(Linux), `DYLD_FALLBACK_LIBRARY_PATH` (macOS).
+Sets environment variables (when not using system NSS): `NSS_DIR`, `NSS_PREBUILT`,
+`NSS_BUILD_FLAGS`, `NSS_BUILD_CFLAGS`, `LD_LIBRARY_PATH` (Linux),
+`DYLD_FALLBACK_LIBRARY_PATH` (macOS).
 
 ```yaml
 - uses: mozilla/actions/nss
@@ -128,9 +129,27 @@ Sets environment variables: `NSS_DIR`, `NSS_PREBUILT`, `LD_LIBRARY_PATH`
     minimum-version: "3.100" # Minimum required NSS version
     sha256: "..." # SHA256 of the 'nss-3.100-with-nspr-<version>.tar.gz' release tarball
     target: "" # Cross-compilation target (e.g. aarch64-linux-android)
+    deps-only: false # Install the build toolchain only, acquiring no NSS (default: false)
     sccache: false # Whether to enable sccache for NSS compilation (default: false)
     token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)
 ```
+
+`deps-only: true` installs the per-platform NSS build toolchain (gyp everywhere, ninja
+on Linux and macOS, and nsinstall plus the MSVC and msys2 setup on Windows, which is
+expected to supply ninja itself) and sets the environment variables above, but
+retrieves and builds nothing. A caller that puts its own NSS checkout at `$NSS_DIR`
+can then build it the way this action does:
+
+```bash
+[ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
+[ -n "$NSS_BUILD_CFLAGS" ] && export CFLAGS="$NSS_BUILD_CFLAGS"
+"$NSS_DIR/build.sh" $NSS_BUILD_FLAGS
+```
+
+`minimum-version`, `sha256` and `cache` are unused in that mode, and
+`NSS_PREBUILT` and the library paths point at a `dist/` the caller has yet to
+produce. `target: *-android` is rejected, because Android builds do not go through
+`build.sh`.
 
 If the `rust` action was called with `sccache: true` earlier in the same job, the `nss`
 action will detect this automatically and use sccache for the NSS build without needing
