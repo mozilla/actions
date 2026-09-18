@@ -34,7 +34,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./crap
+      - uses: $/crap
         with:
           features: ${{ inputs.features }}
           threshold: ${{ inputs.threshold }}
