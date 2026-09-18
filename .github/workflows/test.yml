@@ -23,14 +23,14 @@ defaults:
 
 jobs:
   actionlint:
-    uses: ./.github/workflows/actionlint.yml
+    uses: $/.github/workflows/actionlint.yml
     permissions:
       contents: read
       security-events: write # Required to upload SARIF results to GitHub
 
   dependency-review:
     if: github.event_name == 'pull_request'
-    uses: ./.github/workflows/dependency-review.yml
+    uses: $/.github/workflows/dependency-review.yml
 
   test-rust:
     name: Test Rust action
@@ -41,11 +41,7 @@ jobs:
         os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./rust
+      - uses: $/rust
         id: rust
         with:
           version: stable
@@ -87,7 +83,7 @@ jobs:
           persist-credentials: false
 
       - id: rust
-        uses: ./rust
+        uses: $/rust
         with:
           version: stable
           token: ${{ github.token }}
@@ -111,12 +107,8 @@ jobs:
     env:
       ImageOS: ""
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
       - id: rust
-        uses: ./rust
+        uses: $/rust
         with:
           version: stable
           token: ${{ github.token }}
@@ -140,7 +132,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./rust
+      - uses: $/rust
         with:
           version: stable
           token: ${{ github.token }}
@@ -163,7 +155,7 @@ jobs:
           persist-credentials: false
 
       - id: rust
-        uses: ./rust
+        uses: $/rust
         with:
           version: stable
           token: ${{ github.token }}
@@ -197,7 +189,7 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: ./toolchains
+      - uses: $/toolchains
         id: toolchains
         with:
           working-directory: test-crate
@@ -233,11 +225,7 @@ jobs:
           - windows-2025
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./nss
+      - uses: $/nss
         with:
           minimum-version: ${{ env.NSS_TEST_VERSION }}
           sha256: ${{ env.NSS_TEST_SHA256 }}
@@ -305,22 +293,22 @@ jobs:
           [ ! -d dist ] || { echo "::error::dist/ exists, so NSS was built"; exit 1; }
 
   clippy:
-    uses: ./.github/workflows/clippy.yml
+    uses: $/.github/workflows/clippy.yml
 
   rustfmt:
-    uses: ./.github/workflows/rustfmt.yml
+    uses: $/.github/workflows/rustfmt.yml
 
   deny:
-    uses: ./.github/workflows/deny.yml
+    uses: $/.github/workflows/deny.yml
 
   machete:
-    uses: ./.github/workflows/machete.yml
+    uses: $/.github/workflows/machete.yml
 
   sanitize:
-    uses: ./.github/workflows/sanitize.yml
+    uses: $/.github/workflows/sanitize.yml
 
   crap:
-    uses: ./.github/workflows/crap.yml
+    uses: $/.github/workflows/crap.yml
     permissions:
       contents: read
       security-events: write # Required to upload SARIF results to GitHub
@@ -328,7 +316,7 @@ jobs:
       features: hashing,encoding
 
   mutants:
-    uses: ./.github/workflows/mutants.yml
+    uses: $/.github/workflows/mutants.yml
     with:
       shards: 1
       args: "--features hashing,encoding"
@@ -345,11 +333,7 @@ jobs:
           - x86_64-linux-android
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./nss
+      - uses: $/nss
         with:
           minimum-version: ${{ env.NSS_TEST_VERSION }}
           sha256: ${{ env.NSS_TEST_SHA256 }}
@@ -367,11 +351,7 @@ jobs:
     timeout-minutes: 60
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-
-      - uses: ./nss
+      - uses: $/nss
         with:
           minimum-version: ${{ env.NSS_TEST_VERSION }}
           sha256: ${{ env.NSS_TEST_SHA256 }}
