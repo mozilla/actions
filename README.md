@@ -58,10 +58,17 @@ failure scenario, the number of inline comments is capped, and prose is terse. A
 dependency bumps and lockfile-only diffs are skipped without comment, and a review that finds
 nothing posts nothing.
 
-Before reviewing, Claude reads the existing review threads and treats a point as settled if its
-thread is resolved, carries a 👎, or drew a reply saying it is intentional or out of scope. Settled
-points are not raised again, other than a blocking correctness or security defect with new
-evidence, which goes into the existing thread as a reply.
+Before reviewing, Claude reads the existing review comments and treats a point as settled if its
+thread is resolved, or drew a reply saying it is intentional or out of scope. No
+point a prior review already made is raised again, settled or not; the one exception is a blocking
+correctness or security defect with new evidence, which is commented on the same line, naming the
+thread it answers.
+
+Claude's tool allowlist names tools from the `github-mcp-server` version that
+`anthropics/claude-code-action@v1` bundles, v0.17.1 when last checked. That tag floats and cannot
+be pinned, so the bundled version can change with no commit here; an entry naming a tool the
+running version does not expose is silently inert, with no denial and no warning. Re-verify the
+allowlist against an actual run's tool list periodically, not just on a version bump.
 
 Claude takes `.claude` (settings, skills, agents, commands) and
 `.github/copilot-instructions.md` from the base branch rather than from the pull request,
@@ -73,9 +80,8 @@ project-specific instructions.
 > Requires an `ANTHROPIC_API_KEY` repository secret.
 
 The easiest way to use this is to copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml)
-into your repository — it includes the trigger and permission gating. Add a
-[concurrency group](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/control-the-concurrency-of-workflows-and-jobs)
-and an `ANTHROPIC_API_KEY` secret and you're done.
+into your repository — it includes the trigger, permission gating and a concurrency group. Add an
+`ANTHROPIC_API_KEY` secret and you're done.
 
 Alternatively, call it as a [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows)
 using `secrets: inherit`. Or use the composite action directly to customize model, budget, or prompt:
@@ -238,7 +244,7 @@ jobs:
 
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
 self-contained workflow. Handles the `pull_request_target` trigger and permission gating
-(`OWNER`/`MEMBER`/`COLLABORATOR` only). Concurrency is the caller's responsibility. Can be
+(`OWNER`/`MEMBER`/`COLLABORATOR` only), and serialises runs per pull request. Can be
 copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
 To customize model, budget, or prompt, use the composite action directly.
 
