@@ -20,7 +20,7 @@ inputs:
     default: ""
   budget:
     description: Maximum budget in USD for the review.
-    default: "5.00"
+    default: "10.00"
   prompt:
     description: >
       Additional project-specific review instructions, appended after the base
@@ -152,13 +152,17 @@ runs:
         # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options.
         # Project settings come from the base branch, restored above; local settings and
         # any .mcp.json in the workspace are ignored.
+        # Agent/Task: the code-review skill fans out to subagents, and silently degrades to a
+        # weaker single-pass review without them. ReportFindings: that skill reports through it.
+        # No raw `gh api`: a command-prefix allowlist cannot constrain later arguments, so it
+        # would expose GraphQL mutations and REST writes to the `pull-requests: write` token.
         claude_args: |
           --setting-sources user,project
           --strict-mcp-config
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --allowedTools Skill
+          --allowedTools Skill Agent Task ReportFindings
           --allowedTools "Read(file_path:${{ github.workspace }}/**)" "Glob(path:${{ github.workspace }}/**)" "Grep(path:${{ github.workspace }}/**)"
           --allowedTools "Bash(gh pr view:*)" "Bash(gh pr list:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" "Bash(gh issue list:*)" "Bash(gh release list:*)" "Bash(gh release view:*)" "Bash(git log:*)" "Bash(git diff:*)" "Bash(git show:*)" "Bash(git blame:*)"
           --allowedTools mcp__github_inline_comment__create_inline_comment
@@ -175,15 +179,24 @@ runs:
       env:
         CONCLUSION: ${{ steps.claude.outputs.conclusion }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
+        BUDGET: ${{ inputs.budget }}
       run: |
-        # The action sets conclusion=failure for hard errors (is_error, non-success subtype).
-        if [[ "$CONCLUSION" == "failure" ]]; then
-          echo "Claude execution failed." >&2
-          exit 1
-        fi
-        # Additionally check for permission denials, which don't affect the conclusion.
+        # Diagnose everything the log can explain before the conclusion check exits, so a
+        # truncated or degraded review isn't reported as an unexplained execution failure.
+        SUBTYPE=""
         if [[ -f "$LOG" ]]; then
           RESULT=$(jq 'map(select(.type == "result")) | last // {}' "$LOG" 2>/dev/null)
+          # Report the cost so the budget can be tuned against real runs.
+          COST=$(jq -r '.total_cost_usd // empty' <<< "$RESULT" 2>/dev/null || true)
+          if [[ -n "$COST" ]]; then
+            echo "Review cost \$$COST of the \$$BUDGET budget." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+          SUBTYPE=$(jq -r '.subtype // empty' <<< "$RESULT" 2>/dev/null || true)
+          # Prefix match: the budget subtype is undocumented and may be renamed upstream.
+          if [[ "$SUBTYPE" == error_max_budget* ]]; then
+            echo "::warning::Claude stopped at the \$$BUDGET budget cap, so the review is" \
+              "truncated. Raise the 'budget' input."
+          fi
           DENIALS=$(jq -r '.permission_denials // [] | length' <<< "$RESULT" 2>/dev/null || echo 0)
           if [[ "$DENIALS" -gt 0 ]]; then
             TOOLS=$(jq -r '.permission_denials // [] | .[].tool_name' <<< "$RESULT" 2>/dev/null | sort -u | tr '\n' ',')
@@ -197,4 +210,11 @@ runs:
               end' <<< "$RESULT" 2>/dev/null || true
             echo "::endgroup::"
           fi
+        fi
+        # The action sets conclusion=failure for hard errors (is_error, non-success subtype).
+        # A budget cap is expected rather than a hard error, and the warning above explains it,
+        # so it must not turn a partially-posted review into a red required check.
+        if [[ "$CONCLUSION" == "failure" && "$SUBTYPE" != error_max_budget* ]]; then
+          echo "Claude execution failed." >&2
+          exit 1
         fi

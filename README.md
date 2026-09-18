@@ -46,10 +46,22 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to perform an AI-assisted code review on a pull
-request. Posts inline comments and a PR-level summary via the GitHub review API. A pull
+request. Posts inline comments and an optional PR-level comment via the GitHub review API. A pull
 request from a fork is reviewed only if its author has write access, because reviewing one
 means checking out its code; other pull requests are skipped and the workflow still
 succeeds, without posting a review.
+
+The review runs Claude Code's built-in `code-review` skill for the correctness pass, then adds
+domain passes (`unsafe`/FFI soundness, untrusted input, crypto and TLS, protocol attacks,
+specification conformance). It is tuned against bot noise: every finding must state a concrete
+failure scenario, the number of inline comments is capped, and prose is terse. Automated
+dependency bumps and lockfile-only diffs are skipped without comment, and a review that finds
+nothing posts nothing.
+
+Before reviewing, Claude reads the existing review threads and treats a point as settled if its
+thread is resolved, carries a 👎, or drew a reply saying it is intentional or out of scope. Settled
+points are not raised again, other than a blocking correctness or security defect with new
+evidence, which goes into the existing thread as a reply.
 
 Claude takes `.claude` (settings, skills, agents, commands) and
 `.github/copilot-instructions.md` from the base branch rather than from the pull request,
@@ -80,8 +92,12 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
 | `anthropic_api_key` | _(required)_ | Anthropic API key                                  |
 | `model`             | `""`         | Primary Claude model (upstream default when unset) |
 | `fallback_model`    | `""`         | Fallback model (upstream default when unset)       |
-| `budget`            | `5.00`       | Max spend per review in USD                        |
+| `budget`            | `10.00`      | Max spend per review in USD                        |
 | `prompt`            | `""`         | Additional project-specific review instructions    |
+
+Each run reports what the review cost in the log and the job summary. If it hits the cap, the
+review is truncated and the job emits a warning saying so, but still passes; raise `budget` when
+that happens.
 
 ### `crap` — CRAP analysis
 
