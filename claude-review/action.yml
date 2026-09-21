@@ -20,13 +20,48 @@ inputs:
     default: ""
   budget:
     description: Maximum budget in USD for the review.
-    default: "5.00"
+    default: "10.00"
   prompt:
     description: >
       Additional project-specific review instructions, appended after the base
       review prompt. Use this to add domain-specific focus areas (e.g., protocol
       compliance, unsafe FFI rules) relevant to your project.
     default: ""
+  web_domains:
+    description: >
+      Hosts Claude may fetch with WebFetch, one per line. Replaces the default
+      list rather than adding to it; set it to the empty string for no web
+      access. Rules match the hostname only, so a host that also serves
+      user-uploaded content exposes that content too.
+    default: |
+      www.rfc-editor.org
+      www.ietf.org
+      datatracker.ietf.org
+      dom.spec.whatwg.org
+      encoding.spec.whatwg.org
+      fetch.spec.whatwg.org
+      html.spec.whatwg.org
+      url.spec.whatwg.org
+      www.w3.org
+      tc39.es
+      www.unicode.org
+      csrc.nist.gov
+      nvlpubs.nist.gov
+      doc.rust-lang.org
+      rust-lang.github.io
+      docs.rs
+      man7.org
+      pubs.opengroup.org
+      clang.llvm.org
+      searchfox.org
+      firefox-source-docs.mozilla.org
+      hg.mozilla.org
+      treeherder.mozilla.org
+      bugzilla.mozilla.org
+      www.cve.org
+      nvd.nist.gov
+      rustsec.org
+      osv.dev
 
 runs:
   using: composite
@@ -40,6 +75,7 @@ runs:
         EXTRA_PROMPT: ${{ inputs.prompt }}
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
+        INDEX: ${{ runner.temp }}/review-history/index.json
       run: |
         if [[ -z "$PR_NUMBER" ]]; then
           echo "::error::Claude Code Review must run on a pull request event, or another event that provides a pull request number."
@@ -55,6 +91,7 @@ runs:
           echo "IMPORTANT: Post all review comments exclusively to pull request #${PR_NUMBER}."
           echo "You may read other pull requests for context, but do not post comments to them."
           echo "The workspace's Claude configuration was replaced with the base branch's, so use the pull request diff tools rather than git diff for the changes under review."
+          echo "This pull request's complete review history was fetched to ${INDEX}; step 2 below means that file."
           echo ""
           cat "$ACTION_PATH/prompt.md"
           if [[ -n "$EXTRA_PROMPT" ]]; then
@@ -65,6 +102,30 @@ runs:
           fi
           echo "$DELIM"
         } >> "$GITHUB_OUTPUT"
+
+    # Before checkout too, so the pull request cannot widen its own allowlist.
+    - name: Build web allowlist
+      id: web
+      shell: bash
+      env:
+        DOMAINS: ${{ inputs.web_domains }}
+      run: |
+        ARGS=""
+        while read -r D; do
+          [[ -z "$D" ]] && continue
+          # Rules match hostnames; a path or scheme here would silently never match.
+          if [[ ! "$D" =~ ^[A-Za-z0-9.*-]+$ || "$D" == "*" ]]; then
+            echo "::error::Not a hostname pattern: '$D'. Use a bare host."
+            exit 1
+          fi
+          ARGS+=" \"WebFetch(domain:$D)\""
+        done <<< "$DOMAINS"
+        if [[ -n "$ARGS" ]]; then
+          echo "args=--allowedTools$ARGS" >> "$GITHUB_OUTPUT"
+        else
+          echo "No web domains allowed; Claude will have no WebFetch access."
+          echo "args=" >> "$GITHUB_OUTPUT"
+        fi
 
     # Check that the author can push here.
     - name: Check that PR author is trusted
@@ -140,9 +201,103 @@ runs:
           git checkout FETCH_HEAD -- ':(glob)**/.claude/**'
         fi
 
+    # Fixed queries here can't be steered by injected review text.
+    - name: Fetch review history
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        REPOSITORY: ${{ github.repository }}
+        WORK: ${{ runner.temp }}/review-history-work
+        DIR: ${{ runner.temp }}/review-history
+        PER: 20 # Comments per shard. Small enough that no single Read can truncate.
+      run: |
+        PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
+        mkdir -p "$WORK" "$DIR"
+        RAW="$WORK/comments.ndjson" REVIEWS="$WORK/reviews.json" THREADS="$WORK/threads.json"
+        # Also to the run summary; log warnings go unread on a green job.
+        warn() { echo "::warning::$*"; echo "- :warning: $*" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
+        # Not the same as a pull request with no history.
+        fail() {
+          warn "Could not read the review history ($1), so no point is treated as settled."
+          jq -n --arg reason "$1" '{error: $reason}' > "$DIR/index.json"
+          exit 0
+        }
+        stream() { gh api --paginate --jq '.[]' "$1"; }
+        # After this, any pending review is ours.
+        STALE=$(gh api --paginate "$PR/reviews" --jq '.[] | select(.state == "PENDING") | .id' 2>/dev/null | tail -n1 || echo "")
+        if [[ -n "$STALE" ]]; then
+          echo "Deleting pending review $STALE left by an earlier run."
+          gh api --method DELETE "$PR/reviews/$STALE" >/dev/null 2>&1 || true
+        fi
+        EXPECTED=$(gh api "$PR" --jq '.review_comments') || fail "pull request"
+        stream "$PR/reviews" | jq -s '.' > "$REVIEWS" || fail "reviews"
+        # Complete set, replies and outdated comments included.
+        stream "$PR/comments" > "$RAW" || fail "comments"
+        # Resolution state is GraphQL-only.
+        gh api graphql --paginate -F owner="${REPOSITORY%/*}" -F repo="${REPOSITORY#*/}" -F pr="$PR_NUMBER" \
+          --jq '.data.repository.pullRequest.reviewThreads.nodes[]' -f query='
+          query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
+            repository(owner: $owner, name: $repo) {
+              pullRequest(number: $pr) {
+                reviewThreads(first: 100, after: $endCursor) {
+                  pageInfo { hasNextPage endCursor }
+                  nodes {
+                    isResolved
+                    isOutdated
+                    path
+                    comments(first: 100) { totalCount nodes { databaseId } }
+                  }
+                }
+              }
+            }
+          }' | jq -s '.' > "$THREADS" || fail "review threads"
+        # Bodies stay whole: a "won't fix" reply is the signal.
+        FULL="$WORK/full.json"
+        jq -n --slurpfile c "$RAW" --slurpfile r "$REVIEWS" --slurpfile t "$THREADS" '
+          ([$t[0][] | . as $th | $th.comments.nodes[] |
+            {key: (.databaseId | tostring),
+             value: {resolved: $th.isResolved, outdated: $th.isOutdated}}] | from_entries) as $thread
+          | {reviews: [$r[0][] | {id, state, user: .user.login, submitted_at, commit_id, body}],
+             comments: [$c[] | ($thread[.id | tostring] // {}) as $th |
+               {id, in_reply_to_id, path, line, original_line, start_line, original_start_line,
+                html_url, user: .user.login,
+                suppressed: ($th.resolved // false),
+                outdated: ($th.outdated // false), body}]}' \
+          > "$FULL" || fail "assembly"
+        # Poison the index, or its count check calls a short fetch complete.
+        GOT=$(jq '.comments | length' "$FULL" 2>/dev/null || echo 0)
+        if [[ "$GOT" -lt "$EXPECTED" ]]; then
+          warn "Fetched $GOT review comments but the pull request reports $EXPECTED."
+          fail "only $GOT of $EXPECTED comments"
+        fi
+        # Comments past the nested page come out unsuppressed.
+        OVER=$(jq '[.[] | select(.comments.totalCount > (.comments.nodes | length))] | length' "$THREADS" 2>/dev/null || echo 0)
+        if [[ "$OVER" -gt 0 ]]; then
+          warn "$OVER review thread(s) have more comments than one page returned, so some settled points may be treated as open."
+        fi
+        # Shard so no single Read truncates; index counts catch a partial read.
+        : > "$WORK/index.ndjson"
+        for K in reviews comments; do
+          N=$(jq --arg k "$K" '.[$k] | length' "$FULL")
+          S=$(( (N + PER - 1) / PER ))
+          for ((i = 0; i < S; i++)); do
+            jq --arg k "$K" --argjson o $((i * PER)) --argjson n "$PER" '.[$k][$o:$o+$n]' "$FULL" \
+              > "$(printf '%s/%s-%02d.json' "$DIR" "$K" "$i")" || fail "shard $K $i"
+          done
+          FILES=$(for ((i = 0; i < S; i++)); do printf '"%s-%02d.json"\n' "$K" "$i"; done | paste -sd, -)
+          jq -nc --arg k "$K" --argjson n "$N" --argjson f "[$FILES]" \
+            '{($k): {count: $n, files: $f}}' >> "$WORK/index.ndjson" || fail "index $K"
+          echo "Review history: $N $K in $S shard(s)."
+        done
+        jq -s 'add' "$WORK/index.ndjson" > "$DIR/index.json" || fail "index"
+
     - name: Run Claude Code Review
       id: claude
       if: ${{ steps.trust.outputs.trusted == 'true' }}
+      # The action throws on a budget cap; implicit success() would skip the next step.
+      continue-on-error: true
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "anthropics/claude-code-action@v1"
       uses: anthropics/claude-code-action@v1 # zizmor: ignore[unpinned-uses]
       with:
@@ -152,42 +307,103 @@ runs:
         # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options.
         # Project settings come from the base branch, restored above; local settings and
         # any .mcp.json in the workspace are ignored.
+        # Agent/Task: the skill fans out. ReportFindings: it reports through that.
+        # No Bash: prefix rules can't constrain flags (`git log --output=` writes files).
+        # Names match github-mcp-server v0.17.1; unknown ones are silently inert.
+        # A system prompt too: skill subagents never see prompt.md.
         claude_args: |
           --setting-sources user,project
           --strict-mcp-config
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --allowedTools Skill
-          --allowedTools "Read(file_path:${{ github.workspace }}/**)" "Glob(path:${{ github.workspace }}/**)" "Grep(path:${{ github.workspace }}/**)"
-          --allowedTools "Bash(gh pr view:*)" "Bash(gh pr list:*)" "Bash(gh pr diff:*)" "Bash(gh issue view:*)" "Bash(gh issue list:*)" "Bash(gh release list:*)" "Bash(gh release view:*)" "Bash(git log:*)" "Bash(git diff:*)" "Bash(git show:*)" "Bash(git blame:*)"
-          --allowedTools mcp__github_inline_comment__create_inline_comment
-          --allowedTools mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review,mcp__github__submit_pending_pull_request_review,mcp__github__delete_pending_pull_request_review,mcp__github__create_and_submit_pull_request_review,mcp__github__add_reply_to_pull_request_comment
-          --allowedTools mcp__github__pull_request_read,mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_review_comments,mcp__github__get_pull_request_reviews,mcp__github__get_pull_request_status,mcp__github__list_pull_requests,mcp__github__search_pull_requests
-          --allowedTools mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_discussions,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__list_discussion_categories,mcp__github__get_label,mcp__github__list_label
+          --append-system-prompt "There is no shell, and no base ref to diff against. Get a pull request's diff from mcp__github__get_pull_request_diff and its file list from mcp__github__get_pull_request_files, never from git or gh. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
+          --allowedTools Skill Agent Task ReportFindings
+          --allowedTools "Read(${{ github.workspace }}/**)" "Glob(${{ github.workspace }}/**)" "Grep(${{ github.workspace }}/**)"
+          --allowedTools "Read(${{ runner.temp }}/review-history/**)"
+          ${{ steps.web.outputs.args }}
+          --allowedTools mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review
+          --allowedTools mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_status,mcp__github__list_pull_requests,mcp__github__search_pull_requests
+          --allowedTools mcp__github__get_issue,mcp__github__get_issue_comments,mcp__github__list_issues,mcp__github__search_issues,mcp__github__list_discussions,mcp__github__get_discussion,mcp__github__get_discussion_comments,mcp__github__list_discussion_categories
           --allowedTools mcp__github__get_commit,mcp__github__list_commits,mcp__github__get_me,mcp__github__get_workflow_run,mcp__github__list_workflow_runs,mcp__github__list_workflow_jobs,mcp__github__search_code,mcp__github__search_repositories
-          --allowedTools mcp__github__get_file_contents,mcp__github__get_repository_tree,mcp__github__list_branches,mcp__github__list_releases,mcp__github__get_latest_release,mcp__github__list_tags,mcp__github__get_tag
+          --allowedTools mcp__github__get_file_contents,mcp__github__list_branches,mcp__github__list_releases,mcp__github__get_latest_release,mcp__github__get_release_by_tag,mcp__github__list_tags,mcp__github__get_tag
         prompt: ${{ steps.prompt.outputs.content }}
 
-    - name: Check review outcome
-      if: ${{ steps.trust.outputs.trusted == 'true' }}
+    # Event is a literal here. Runs after failure so a partial review still posts.
+    - name: Submit review
+      if: ${{ !cancelled() && steps.trust.outputs.trusted == 'true' && steps.claude.outcome != 'skipped' }}
       shell: bash
       env:
-        CONCLUSION: ${{ steps.claude.outputs.conclusion }}
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        REPOSITORY: ${{ github.repository }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
       run: |
-        # The action sets conclusion=failure for hard errors (is_error, non-success subtype).
-        if [[ "$CONCLUSION" == "failure" ]]; then
-          echo "Claude execution failed." >&2
+        PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
+        # A failed listing must not read as "nothing to submit": the review is still pending.
+        if ! PENDING=$(gh api --paginate "$PR/reviews" --jq '.[] | select(.state == "PENDING") | .id'); then
+          echo "::error::Could not list reviews on $PR. A composed review may still be pending; re-run the job."
           exit 1
         fi
-        # Additionally check for permission denials, which don't affect the conclusion.
+        # --paginate runs --jq per page; take the last value.
+        ID=$(tail -n1 <<< "$PENDING")
+        if [[ -z "$ID" ]]; then
+          echo "No pending review to submit."
+          exit 0
+        fi
+        # Last top-level message; subagent reports aren't the body.
+        BODY=$(jq -r '[.[] | select(.type == "assistant" and (.parent_tool_use_id // null) == null)
+          | .message.content[]? | select(.type == "text") | .text] | last // ""' "$LOG" 2>/dev/null || echo "")
+        # A COMMENT event needs a body. Match the sentinel through any decoration.
+        case "$(tr -dc '[:alnum:]' <<< "$BODY" | tr '[:lower:]' '[:upper:]')" in
+        "" | NOREVIEWBODY)
+          # An API failure must not read as "no comments".
+          CMTS=$(gh api --paginate "$PR/reviews/$ID/comments" --jq '.[].id' 2>/dev/null) || CMTS=unknown
+          if [[ -z "$CMTS" ]]; then
+            echo "Pending review $ID has no comments and no body; deleting it."
+            gh api --method DELETE "$PR/reviews/$ID" >/dev/null 2>&1 || true
+            exit 0
+          fi
+          BODY="_No whole-change observations._"
+          ;;
+        esac
+        if gh api --method POST "$PR/reviews/$ID/events" -f event=COMMENT -f body="$BODY" >/dev/null; then
+          echo "Submitted review $ID."
+        else
+          # Leave it pending: the next run clears it.
+          echo "::error::Could not submit review $ID. The review is still pending; re-run the job."
+          exit 1
+        fi
+
+    - name: Check review outcome
+      if: ${{ !cancelled() && steps.trust.outputs.trusted == 'true' }}
+      shell: bash
+      env:
+        OUTCOME: ${{ steps.claude.outcome }}
+        LOG: ${{ runner.temp }}/claude-execution-output.json
+        BUDGET: ${{ inputs.budget }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        DIR: ${{ runner.temp }}/review-history
+      run: |
+        # Also to the run summary; log warnings go unread on a green job.
+        warn() { echo "::warning::$*"; echo "- :warning: $*" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
+        # Diagnose before exiting non-zero.
+        SUBTYPE=""
         if [[ -f "$LOG" ]]; then
-          RESULT=$(jq 'map(select(.type == "result")) | last // {}' "$LOG" 2>/dev/null)
+          RESULT=$(jq 'map(select(.type == "result")) | last // {}' "$LOG" 2>/dev/null || echo '{}')
+          COST=$(jq -r '.total_cost_usd // empty' <<< "$RESULT" 2>/dev/null || true)
+          if [[ -n "$COST" ]]; then
+            echo "Review cost \$$COST of the \$$BUDGET budget." | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
+          fi
+          SUBTYPE=$(jq -r '.subtype // empty' <<< "$RESULT" 2>/dev/null || true)
+          # Prefix match: the budget subtype is undocumented.
+          if [[ "$SUBTYPE" == error_max_budget* ]]; then
+            warn "Claude stopped at the \$$BUDGET budget cap, so the review is truncated. Raise the 'budget' input."
+          fi
           DENIALS=$(jq -r '.permission_denials // [] | length' <<< "$RESULT" 2>/dev/null || echo 0)
           if [[ "$DENIALS" -gt 0 ]]; then
             TOOLS=$(jq -r '.permission_denials // [] | .[].tool_name' <<< "$RESULT" 2>/dev/null | sort -u | tr '\n' ',')
-            echo "::warning::Claude had $DENIALS permission denial(s) — review may be incomplete. Denied tools: ${TOOLS%,}"
+            warn "Claude had $DENIALS permission denial(s) — review may be incomplete. Denied tools: ${TOOLS%,}"
             echo "::group::Permission denial details"
             jq -r '.permission_denials // [] | .[] |
               if .tool_name == "Bash" then
@@ -197,4 +413,42 @@ runs:
               end' <<< "$RESULT" 2>/dev/null || true
             echo "::endgroup::"
           fi
+          USES=$(jq '[.[] | select(.type == "assistant") | .message.content[]? |
+            select(.type == "tool_use")]' "$LOG" 2>/dev/null || echo '[]')
+          # Every jq defaults: a malformed log must not fail a posted review.
+          SKILL_CALLS=$(jq --arg pr "$PR_NUMBER" '[.[] | select((.name // "") == "Skill"
+            and (.input.skill // "") == "code-review"
+            and ((.input.args // "") | contains($pr)))] | length' <<< "$USES" 2>/dev/null || echo 0)
+          POSTS=$(jq '[.[] | select((.name // "")
+            | endswith("add_comment_to_pending_review"))] | length' <<< "$USES" 2>/dev/null || echo 0)
+          if [[ "$POSTS" -gt 0 && "$SKILL_CALLS" -eq 0 ]]; then
+            warn "Claude wrote a review without invoking the code-review skill on pull request $PR_NUMBER, so the correctness pass was skipped."
+          fi
+          # The skill's recipe reaches for git and gh; denied means no findings.
+          if [[ "$SKILL_CALLS" -gt 0 && "$DENIALS" -gt 0 ]]; then
+            warn "The code-review skill ran with $DENIALS denial(s), so the correctness pass may have produced nothing. Check the denied tools above."
+          fi
+          SHARDS=$(jq -r '[.[] | .files // []] | flatten | length' "$DIR/index.json" 2>/dev/null || echo 0)
+          READ_SHARDS=$(jq --arg d "$DIR/" '[.[] | select((.name // "") == "Read")
+            | (.input.file_path // "")
+            | select(startswith($d) and (endswith("index.json") | not))] | unique | length' \
+            <<< "$USES" 2>/dev/null || echo 0)
+          # A skipped pull request reads nothing.
+          if [[ "$SKILL_CALLS" -gt 0 && "$READ_SHARDS" -lt "$SHARDS" ]]; then
+            warn "Claude read $READ_SHARDS of the $SHARDS review-history files, so the suppression ledger was built from a partial history."
+          fi
+          BAD_EVENT=$(jq -r '[.[] | select((.name // "")
+            | endswith("submit_pending_pull_request_review"))
+            | .input.event // "COMMENT" | select(. != "COMMENT")] | join(",")' \
+            <<< "$USES" 2>/dev/null || echo "")
+          # Already denied by the allowlist, so warn only.
+          if [[ -n "$BAD_EVENT" ]]; then
+            warn "Claude tried to submit a review with event '$BAD_EVENT', which prompt.md forbids and the allowlist denies. Possible prompt injection."
+          fi
+        fi
+        # The conclusion output is unset when the action throws.
+        # A budget cap is expected.
+        if [[ "$OUTCOME" == "failure" && "$SUBTYPE" != error_max_budget* ]]; then
+          echo "Claude execution failed." >&2
+          exit 1
         fi
