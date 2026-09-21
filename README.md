@@ -45,48 +45,26 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 
 ### `claude-review` — Claude Code Review
 
-Runs [Claude Code](https://claude.ai/code) to perform an AI-assisted code review on a pull
-request. Posts inline comments and an optional PR-level comment via the GitHub review API. A pull
-request from a fork is reviewed only if its author has write access, because reviewing one
-means checking out its code; other pull requests are skipped and the workflow still
-succeeds, without posting a review.
+Runs [Claude Code](https://claude.ai/code) to review a pull request through the GitHub review API.
+Fork pull requests are reviewed only if the author has write access, since reviewing one means
+checking out its code; others are skipped and the job still passes.
 
-The review runs Claude Code's built-in `code-review` skill for the correctness pass, then adds
-domain passes (`unsafe`/FFI soundness, untrusted input, crypto and TLS, protocol attacks,
-specification conformance, contract misuse, breaking API changes). It is tuned against bot noise:
-every finding must state a concrete
-failure scenario, the number of inline comments is capped, and prose is terse. Automated
-dependency bumps and lockfile-only diffs are skipped without comment, and a review that finds
-nothing posts nothing. A review that has inline comments but no whole-change observation gets a
-placeholder body, since GitHub requires one on a `COMMENT` review.
+It runs the built-in `code-review` skill, then domain passes for `unsafe`/FFI soundness, untrusted
+input, crypto and TLS, protocol attacks, specification conformance, contract misuse and behavioral
+compatibility. Every finding states a concrete failure scenario, inline comments are capped, and
+points a prior review already made are not re-raised. Every run posts one review, so a silent job
+never reads as a clean one.
 
-Before reviewing, Claude reads the existing review comments and treats a point as settled if its
-thread is resolved, or drew a reply saying it is intentional or out of scope. No
-point a prior review already made is raised again, settled or not; the one exception is a blocking
-correctness or security defect with new evidence, which is commented on the same line, naming the
-thread it answers.
-
-Claude's tool allowlist names tools from the `github-mcp-server` version that
-`anthropics/claude-code-action@v1` bundles, v0.17.1 when last checked. That tag floats and cannot
-be pinned, so the bundled version can change with no commit here; an entry naming a tool the
-running version does not expose is silently inert, with no denial and no warning. Re-verify the
-allowlist against an actual run's tool list periodically, not just on a version bump.
-
-Claude takes `.claude` (settings, skills, agents, commands) and
-`.github/copilot-instructions.md` from the base branch rather than from the pull request,
-and ignores `CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json` entirely. Use
-`.github/copilot-instructions.md` on the base branch, or the `prompt` input, for
-project-specific instructions.
+Claude takes `.claude` and `.github/copilot-instructions.md` from the base branch, and ignores
+`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json`.
 
 > [!NOTE]
 > Requires an `ANTHROPIC_API_KEY` repository secret.
 
-The easiest way to use this is to copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml)
-into your repository — it includes the trigger, permission gating and a concurrency group. Add an
-`ANTHROPIC_API_KEY` secret and you're done.
-
-Alternatively, call it as a [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows)
-using `secrets: inherit`. Or use the composite action directly to customize model, budget, or prompt:
+Copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml) into your
+repository, or call it as a
+[reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) with
+`secrets: inherit`. To customize, use the composite action directly:
 
 ```yaml
 - uses: mozilla/actions/claude-review
@@ -95,8 +73,8 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
-Calling the action directly means supplying the concurrency group yourself. Runs on one pull
-request share a pending review, so key the group by pull request alone:
+That means supplying the concurrency group yourself. Runs on one pull request share a pending
+review, so key it by pull request alone:
 
 ```yaml
 concurrency:
@@ -113,18 +91,13 @@ concurrency:
 | `prompt`            | `""`         | Additional project-specific review instructions    |
 | `web_domains`       | _(see below)_ | Hosts Claude may fetch, one per line               |
 
-Each run reports what the review cost in the log and the job summary. If it hits the cap, the
-review is truncated and the job emits a warning saying so, but still passes; raise `budget` when
-that happens.
+Each run reports its cost in the job summary; at the cap the review is truncated and the job warns
+but still passes.
 
 `web_domains` lets Claude check a claim against the specification instead of reciting it from
-memory. It defaults to specification, language, Mozilla and vulnerability-database hosts; setting
-it replaces that list, and `""` disables web access. `WebSearch` stays off: no permission rule can
-constrain which domains a search reaches.
-
-Rules match hostnames, not paths, so a host is all-or-nothing — `bugzilla.mozilla.org` includes
-its attachments, `docs.rs` every crate's author-written docs. Drop those two to review without
-reading anything user-uploaded.
+memory. Setting it replaces the default list; `""` disables web access. Rules match hostnames, not
+paths, so `bugzilla.mozilla.org` includes its attachments and `docs.rs` every crate's author-written
+docs. `WebSearch` stays off: no permission rule can constrain a search's domains.
 
 ### `crap` — CRAP analysis
 
