@@ -46,10 +46,31 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to perform an AI-assisted code review on a pull
-request. Posts inline comments and a PR-level summary via the GitHub review API. A pull
+request. Posts inline comments and an optional PR-level comment via the GitHub review API. A pull
 request from a fork is reviewed only if its author has write access, because reviewing one
 means checking out its code; other pull requests are skipped and the workflow still
 succeeds, without posting a review.
+
+The review runs Claude Code's built-in `code-review` skill for the correctness pass, then adds
+domain passes (`unsafe`/FFI soundness, untrusted input, crypto and TLS, protocol attacks,
+specification conformance, contract misuse, breaking API changes). It is tuned against bot noise:
+every finding must state a concrete
+failure scenario, the number of inline comments is capped, and prose is terse. Automated
+dependency bumps and lockfile-only diffs are skipped without comment, and a review that finds
+nothing posts nothing. A review that has inline comments but no whole-change observation gets a
+placeholder body, since GitHub requires one on a `COMMENT` review.
+
+Before reviewing, Claude reads the existing review comments and treats a point as settled if its
+thread is resolved, or drew a reply saying it is intentional or out of scope. No
+point a prior review already made is raised again, settled or not; the one exception is a blocking
+correctness or security defect with new evidence, which is commented on the same line, naming the
+thread it answers.
+
+Claude's tool allowlist names tools from the `github-mcp-server` version that
+`anthropics/claude-code-action@v1` bundles, v0.17.1 when last checked. That tag floats and cannot
+be pinned, so the bundled version can change with no commit here; an entry naming a tool the
+running version does not expose is silently inert, with no denial and no warning. Re-verify the
+allowlist against an actual run's tool list periodically, not just on a version bump.
 
 Claude takes `.claude` (settings, skills, agents, commands) and
 `.github/copilot-instructions.md` from the base branch rather than from the pull request,
@@ -61,9 +82,8 @@ project-specific instructions.
 > Requires an `ANTHROPIC_API_KEY` repository secret.
 
 The easiest way to use this is to copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml)
-into your repository — it includes the trigger and permission gating. Add a
-[concurrency group](https://docs.github.com/en/actions/writing-workflows/choosing-what-your-workflow-does/control-the-concurrency-of-workflows-and-jobs)
-and an `ANTHROPIC_API_KEY` secret and you're done.
+into your repository — it includes the trigger, permission gating and a concurrency group. Add an
+`ANTHROPIC_API_KEY` secret and you're done.
 
 Alternatively, call it as a [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows)
 using `secrets: inherit`. Or use the composite action directly to customize model, budget, or prompt:
@@ -75,13 +95,36 @@ using `secrets: inherit`. Or use the composite action directly to customize mode
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
+Calling the action directly means supplying the concurrency group yourself. Runs on one pull
+request share a pending review, so key the group by pull request alone:
+
+```yaml
+concurrency:
+  group: claude-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+```
+
 | Input               | Default      | Description                                        |
 | ------------------- | ------------ | -------------------------------------------------- |
 | `anthropic_api_key` | _(required)_ | Anthropic API key                                  |
 | `model`             | `""`         | Primary Claude model (upstream default when unset) |
 | `fallback_model`    | `""`         | Fallback model (upstream default when unset)       |
-| `budget`            | `5.00`       | Max spend per review in USD                        |
+| `budget`            | `10.00`      | Max spend per review in USD                        |
 | `prompt`            | `""`         | Additional project-specific review instructions    |
+| `web_domains`       | _(see below)_ | Hosts Claude may fetch, one per line               |
+
+Each run reports what the review cost in the log and the job summary. If it hits the cap, the
+review is truncated and the job emits a warning saying so, but still passes; raise `budget` when
+that happens.
+
+`web_domains` lets Claude check a claim against the specification instead of reciting it from
+memory. It defaults to specification, language, Mozilla and vulnerability-database hosts; setting
+it replaces that list, and `""` disables web access. `WebSearch` stays off: no permission rule can
+constrain which domains a search reaches.
+
+Rules match hostnames, not paths, so a host is all-or-nothing — `bugzilla.mozilla.org` includes
+its attachments, `docs.rs` every crate's author-written docs. Drop those two to review without
+reading anything user-uploaded.
 
 ### `crap` — CRAP analysis
 
@@ -222,8 +265,8 @@ jobs:
 
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
 self-contained workflow. Handles the `pull_request_target` trigger and permission gating
-(`OWNER`/`MEMBER`/`COLLABORATOR` only). Concurrency is the caller's responsibility. Can be
-copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
+(`OWNER`/`MEMBER`/`COLLABORATOR` only), and cancels a superseded run on the same pull request.
+Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
 To customize model, budget, or prompt, use the composite action directly.
 
 ### `deny.yml` — cargo deny
