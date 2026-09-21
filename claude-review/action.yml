@@ -49,7 +49,11 @@ inputs:
       nvlpubs.nist.gov
       doc.rust-lang.org
       rust-lang.github.io
+      code.claude.com
+      docs.claude.com
+      docs.github.com
       docs.rs
+      crates.io
       man7.org
       pubs.opengroup.org
       clang.llvm.org
@@ -311,6 +315,9 @@ runs:
         # No Bash: prefix rules can't constrain flags (`git log --output=` writes files).
         # Names match github-mcp-server v0.17.1; unknown ones are silently inert.
         # A system prompt too: skill subagents never see prompt.md.
+        # Path rules need the extra leading slash: a single one anchors at the workspace,
+        # `//` is the filesystem root. Workspace reads are allowed anyway, so dropping it
+        # silently denies just the review history, which sits outside the workspace.
         claude_args: |
           --setting-sources user,project
           --strict-mcp-config
@@ -319,8 +326,8 @@ runs:
           --max-budget-usd ${{ inputs.budget }}
           --append-system-prompt "There is no shell, and no base ref to diff against. Get a pull request's diff from mcp__github__get_pull_request_diff and its file list from mcp__github__get_pull_request_files, never from git or gh. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
           --allowedTools Skill Agent Task ReportFindings
-          --allowedTools "Read(${{ github.workspace }}/**)" "Glob(${{ github.workspace }}/**)" "Grep(${{ github.workspace }}/**)"
-          --allowedTools "Read(${{ runner.temp }}/review-history/**)"
+          --allowedTools "Read(/${{ github.workspace }}/**)" "Glob(/${{ github.workspace }}/**)" "Grep(/${{ github.workspace }}/**)"
+          --allowedTools "Read(/${{ runner.temp }}/review-history/**)"
           ${{ steps.web.outputs.args }}
           --allowedTools mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review
           --allowedTools mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_status,mcp__github__list_pull_requests,mcp__github__search_pull_requests
@@ -331,12 +338,14 @@ runs:
 
     # Event is a literal here. Runs after failure so a partial review still posts.
     - name: Submit review
+      id: submit
       if: ${{ !cancelled() && steps.trust.outputs.trusted == 'true' && steps.claude.outcome != 'skipped' }}
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
+        OUTCOME: ${{ steps.claude.outcome }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
       run: |
         PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
@@ -347,33 +356,45 @@ runs:
         fi
         # --paginate runs --jq per page; take the last value.
         ID=$(tail -n1 <<< "$PENDING")
-        if [[ -z "$ID" ]]; then
-          echo "No pending review to submit."
-          exit 0
-        fi
         # Last top-level message; subagent reports aren't the body.
         BODY=$(jq -r '[.[] | select(.type == "assistant" and (.parent_tool_use_id // null) == null)
           | .message.content[]? | select(.type == "text") | .text] | last // ""' "$LOG" 2>/dev/null || echo "")
-        # A COMMENT event needs a body. Match the sentinel through any decoration.
+        # Match the sentinel through any decoration.
         case "$(tr -dc '[:alnum:]' <<< "$BODY" | tr '[:lower:]' '[:upper:]')" in
-        "" | NOREVIEWBODY)
-          # An API failure must not read as "no comments".
-          CMTS=$(gh api --paginate "$PR/reviews/$ID/comments" --jq '.[].id' 2>/dev/null) || CMTS=unknown
-          if [[ -z "$CMTS" ]]; then
-            echo "Pending review $ID has no comments and no body; deleting it."
-            gh api --method DELETE "$PR/reviews/$ID" >/dev/null 2>&1 || true
-            exit 0
-          fi
-          BODY="_No whole-change observations._"
-          ;;
+        "" | NOREVIEWBODY) BODY="" ;;
         esac
-        if gh api --method POST "$PR/reviews/$ID/events" -f event=COMMENT -f body="$BODY" >/dev/null; then
-          echo "Submitted review $ID."
-        else
-          # Leave it pending: the next run clears it.
-          echo "::error::Could not submit review $ID. The review is still pending; re-run the job."
-          exit 1
+        CMTS=0
+        if [[ -n "$ID" ]]; then
+          # Unknown, not zero: a pending review the listing failed on may still hold findings.
+          if LIST=$(gh api --paginate "$PR/reviews/$ID/comments" --jq '.[].id'); then
+            CMTS=$(awk 'NF' <<< "$LIST" | wc -l | tr -d ' ')
+          else
+            CMTS=unknown
+          fi
         fi
+        # Every run posts a review, so a silent job cannot be mistaken for a clean one.
+        # Only a counted zero claims there were no findings.
+        if [[ -z "$BODY" ]]; then
+          if [[ "$CMTS" == 0 ]]; then BODY="_No findings._"; else BODY="_No whole-change observations._"; fi
+        fi
+        if [[ "$OUTCOME" != "success" ]]; then
+          BODY="$BODY"$'\n\n'"> [!WARNING]"$'\n'"> Review did not finish (\`$OUTCOME\`); it may be incomplete."
+        fi
+        if [[ -n "$ID" ]]; then
+          # Submitting a review Claude left pending keeps its inline comments.
+          URL=$(gh api --method POST "$PR/reviews/$ID/events" -f event=COMMENT -f body="$BODY" --jq .html_url) || {
+            # Leave it pending: the next run clears it.
+            echo "::error::Could not submit review $ID. The review is still pending; re-run the job."
+            exit 1
+          }
+        else
+          URL=$(gh api --method POST "$PR/reviews" -f event=COMMENT -f body="$BODY" --jq .html_url) || {
+            echo "::error::Could not post a review on $PR."
+            exit 1
+          }
+        fi
+        echo "Posted a review with $CMTS inline comment(s): $URL"
+        { echo "comments=$CMTS"; echo "url=$URL"; } >> "$GITHUB_OUTPUT"
 
     - name: Check review outcome
       if: ${{ !cancelled() && steps.trust.outputs.trusted == 'true' }}
@@ -384,18 +405,28 @@ runs:
         BUDGET: ${{ inputs.budget }}
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         DIR: ${{ runner.temp }}/review-history
+        POSTED: ${{ steps.submit.outputs.comments }}
+        URL: ${{ steps.submit.outputs.url }}
       run: |
+        SUMMARY="${GITHUB_STEP_SUMMARY:-/dev/null}"
         # Also to the run summary; log warnings go unread on a green job.
-        warn() { echo "::warning::$*"; echo "- :warning: $*" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
+        warn() { echo "::warning::$*"; echo "- :warning: $*" >> "$SUMMARY"; }
         # Diagnose before exiting non-zero.
         SUBTYPE=""
         if [[ -f "$LOG" ]]; then
           RESULT=$(jq 'map(select(.type == "result")) | last // {}' "$LOG" 2>/dev/null || echo '{}')
           COST=$(jq -r '.total_cost_usd // empty' <<< "$RESULT" 2>/dev/null || true)
-          if [[ -n "$COST" ]]; then
-            echo "Review cost \$$COST of the \$$BUDGET budget." | tee -a "${GITHUB_STEP_SUMMARY:-/dev/null}"
-          fi
+          TURNS=$(jq -r '.num_turns // empty' <<< "$RESULT" 2>/dev/null || true)
+          SECS=$(jq -r 'if .duration_ms then (.duration_ms / 1000 | round | tostring) else empty end' <<< "$RESULT" 2>/dev/null || true)
           SUBTYPE=$(jq -r '.subtype // empty' <<< "$RESULT" 2>/dev/null || true)
+          # A green job that posts nothing must still say what it did.
+          {
+            echo "### Claude review"
+            echo ""
+            echo "- Claude step: \`$OUTCOME\`${SUBTYPE:+ (\`$SUBTYPE\`)}"
+            echo "- Review posted: ${URL:-none} (${POSTED:-0} inline comments)"
+            echo "- ${TURNS:-?} turns, ${SECS:-?}s, \$${COST:-?} of \$$BUDGET"
+          } >> "$SUMMARY"
           # Prefix match: the budget subtype is undocumented.
           if [[ "$SUBTYPE" == error_max_budget* ]]; then
             warn "Claude stopped at the \$$BUDGET budget cap, so the review is truncated. Raise the 'budget' input."
@@ -415,6 +446,10 @@ runs:
           fi
           USES=$(jq '[.[] | select(.type == "assistant") | .message.content[]? |
             select(.type == "tool_use")]' "$LOG" 2>/dev/null || echo '[]')
+          # Names only: the action hides Claude's output, so this is the record of what it did.
+          echo "::group::Tool calls"
+          jq -r '.[] | .name // empty' <<< "$USES" 2>/dev/null | sort | uniq -c | sort -rn || true
+          echo "::endgroup::"
           # Every jq defaults: a malformed log must not fail a posted review.
           SKILL_CALLS=$(jq --arg pr "$PR_NUMBER" '[.[] | select((.name // "") == "Skill"
             and (.input.skill // "") == "code-review"
