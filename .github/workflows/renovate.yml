@@ -18,6 +18,8 @@ jobs:
     permissions: {} # PAT carries all required permissions; GITHUB_TOKEN is unused
     steps:
       - name: Run Renovate
-        run: docker run --rm -e RENOVATE_TOKEN renovate/renovate mozilla/actions
+        run: docker run --rm -e RENOVATE_TOKEN "$RENOVATE_IMAGE" mozilla/actions
         env:
+          # renovate: depName=renovate/renovate datasource=docker
+          RENOVATE_IMAGE: renovate/renovate:44.145.1@sha256:6f1f3e2d9d0c3f99aa1f61f7509d302185de7deb173ac8c5ff88a5ce283ec435
           RENOVATE_TOKEN: ${{ secrets.RENOVATE }} # zizmor: ignore[secrets-outside-env]

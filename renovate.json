@@ -20,7 +20,8 @@
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[A-Z_]+=(?<currentValue>[0-9][0-9.]*)",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]+# v(?<currentValue>[0-9][0-9.]*)",
         "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+=(?<currentValue>[0-9][0-9.]*)\\n\\s+[A-Z_]+=(?<currentDigest>[0-9a-f]{7,40})",
-        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]*==(?<currentValue>[0-9][0-9.]*)"
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n[^\\n]*==(?<currentValue>[0-9][0-9.]*)",
+        "# renovate: depName=(?<depName>\\S+) datasource=(?<datasource>\\S+)(?: versioning=(?<versioning>\\S+))?\\n\\s+[A-Z_]+: \\S+?:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[0-9a-f]{64})"
       ]
     }
   ],
@@ -34,6 +35,12 @@
     {
       "matchDepNames": ["cargo-bins/cargo-binstall"],
       "extractVersion": "^v?(?<version>.+)$"
+    },
+    {
+      "description": "Renovate releases several times a day; update at most monthly.",
+      "matchDepNames": ["renovate/renovate"],
+      "schedule": ["* * 1-7 * *"],
+      "updateNotScheduled": false
     }
   ]
 }
