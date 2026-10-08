@@ -227,10 +227,19 @@ runs:
         {
           echo C:/msys64/usr/bin
           echo C:/msys64/mingw64/bin
+          echo "$HOME/bin"
         } >> "$GITHUB_PATH"
-        /c/msys64/usr/bin/pacman -S --noconfirm python3-pip nsinstall
+        mkdir -p "$HOME/bin"
+        # renovate: depName=firefox datasource=custom.firefox
+        curl --proto '=https' --tlsv1.2 -o "$HOME/bin/nsinstall" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_149_0_2_RELEASE/config/nsinstall.py
+        echo "f88df5591ee50d6e86625efd6e5f9c7b0dd4cba61e27ab533b1990115e100caf  $HOME/bin/nsinstall" | sha256sum -c -
+        sed -i '1i #! /usr/bin/env python3' "$HOME/bin/nsinstall"
+        chmod +x "$HOME/bin/nsinstall"
+        # gyp-next>=0.22.0 added Windows ARM64 target support (nodejs/gyp-next#331).
         # renovate: depName=gyp-next datasource=pypi
         echo "gyp-next==0.22.3" > req.txt
+        # renovate: depName=mozfile datasource=pypi
+        echo "mozfile==3.0.0" >> req.txt  # required by nsinstall.py
         python3 -m pip install -r req.txt
 
     - name: Set up MSVC (Windows)
@@ -238,6 +247,8 @@ runs:
       uses: ilammy/msvc-dev-cmd@v1 # zizmor: ignore[unpinned-uses]
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "ilammy/msvc-dev-cmd@v1*"
       # uses: ilammy/msvc-dev-cmd@0b201ec74fa43914dc39ae48a89fd1d8cb592756 # v1.13.0
+      with:
+        arch: ${{ runner.arch == 'ARM64' && 'arm64' || 'amd64' }}
 
     - name: Set up build environment (Windows)
       shell: bash
