@@ -1,7 +1,10 @@
 name: Claude Code Review
 on:
-  pull_request_target: # zizmor: ignore[dangerous-triggers] Only authors with write access are reviewed; fork code is not executed.
-    types: [opened, synchronize, ready_for_review, reopened]
+  workflow_run: # zizmor: ignore[dangerous-triggers] Only trusted pull requests are reviewed; fork code is not executed.
+    workflows: [Claude Code Review Trigger]
+    types: [completed]
+  issue_comment:
+    types: [created]
   workflow_call:
     secrets:
       ANTHROPIC_API_KEY:
@@ -10,7 +13,9 @@ on:
 
 # A cancelled run's pending review is deleted by the next run's history fetch.
 concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.ref }}
+  group: >-
+    claude-review-${{ github.event.issue.number && format('pr-{0}', github.event.issue.number)
+    || format('{0}-{1}', github.event.workflow_run.head_repository.full_name, github.event.workflow_run.head_branch) }}
   cancel-in-progress: true
 
 permissions:
@@ -19,15 +24,17 @@ permissions:
 jobs:
   claude-review:
     name: Claude Code Review
+    # Comments other than the command don't start a runner.
     if: >-
-      !github.event.pull_request.draft &&
-      github.event.pull_request.user.type != 'Bot'
+      github.event_name == 'workflow_run' && github.event.workflow_run.event == 'pull_request' ||
+      github.event_name == 'issue_comment' && github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/claude-review')
     runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: write # Required to post review comments.
       issues: read # Required to read issue context via MCP tools.
-      actions: read # Required to read workflow run context via MCP tools.
+      actions: read # Required to match comments to pushes, and to read workflow run context via MCP tools.
       discussions: read # Required to read discussion context via MCP tools.
     steps:
       - uses: $/claude-review

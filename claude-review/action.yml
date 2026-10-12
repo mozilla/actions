@@ -70,6 +70,59 @@ inputs:
 runs:
   using: composite
   steps:
+    # workflow_run carries no pull request number for forks, so match its head instead.
+    - name: Find pull request
+      id: pr
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        EVENT: ${{ github.event_name }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        ON_PR: ${{ github.event.issue.pull_request && 'true' || '' }}
+        RUN_OWNER: ${{ github.event.workflow_run.head_repository.owner.login }}
+        RUN_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        RUN_SHA: ${{ github.event.workflow_run.head_sha }}
+      run: |
+        skip() {
+          echo "::notice::Not reviewing: $*"
+          echo "skip=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        }
+        case "$EVENT" in
+        pull_request_target) MODE=auto ;;
+        issue_comment)
+          [[ -n "$ON_PR" ]] || skip "the comment is not on a pull request."
+          MODE=comment
+          ;;
+        workflow_run)
+          MODE=auto
+          PR_NUMBER=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f head="$RUN_OWNER:$RUN_BRANCH" |
+            jq -r --arg sha "$RUN_SHA" --arg repo "$GITHUB_REPOSITORY" \
+              'first(.[] | select(.head.sha == $sha and .base.repo.full_name == $repo) | .number) // empty')
+          [[ -n "$PR_NUMBER" ]] || skip "no open pull request from $RUN_OWNER:$RUN_BRANCH is at $RUN_SHA."
+          ;;
+        *)
+          echo "::error::Claude Code Review must run on a workflow_run, issue_comment or pull_request_target event."
+          exit 1
+          ;;
+        esac
+        PR=$(gh api "repos/$GITHUB_REPOSITORY/pulls/$PR_NUMBER")
+        [[ "$(jq -r .state <<< "$PR")" == open ]] || skip "pull request #$PR_NUMBER is not open."
+        [[ "$(jq -r .user.type <<< "$PR")" != Bot ]] || skip "pull request #$PR_NUMBER is by a bot."
+        [[ "$(jq -r .head.repo.full_name <<< "$PR")" != null ]] || skip "the head repository of #$PR_NUMBER is gone."
+        if [[ "$MODE" == auto ]]; then
+          [[ "$(jq -r .draft <<< "$PR")" != true ]] || skip "pull request #$PR_NUMBER is a draft."
+          # A newer push brings its own run.
+          if [[ "$EVENT" == workflow_run && "$(jq -r .head.sha <<< "$PR")" != "$RUN_SHA" ]]; then
+            skip "pull request #$PR_NUMBER moved past $RUN_SHA."
+          fi
+        fi
+        echo "mode=$MODE" >> "$GITHUB_OUTPUT"
+        # Git refnames and logins cannot hold newlines.
+        jq -r '"number=\(.number)", "author=\(.user.login)", "head_repo=\(.head.repo.full_name)",
+          "head_ref=\(.head.ref)", "head_sha=\(.head.sha)", "base_sha=\(.base.sha)"' \
+          <<< "$PR" >> "$GITHUB_OUTPUT"
+
     # Read prompt before PR checkout so it comes from the action version (non-spoofable).
     - name: Read prompt
       id: prompt
@@ -77,15 +130,11 @@ runs:
       env:
         ACTION_PATH: ${{ github.action_path }}
         EXTRA_PROMPT: ${{ inputs.prompt }}
-        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
         REPOSITORY: ${{ github.repository }}
         INDEX: ${{ runner.temp }}/review-history/index.json
         DIFF_INDEX: ${{ runner.temp }}/pr-diff/index.json
       run: |
-        if [[ -z "$PR_NUMBER" ]]; then
-          echo "::error::Claude Code Review must run on a pull request event, or another event that provides a pull request number."
-          exit 1
-        fi
         # Use a random delimiter to prevent injection via the prompt input.
         DELIM="EOF_$(head -c 8 /dev/urandom | xxd -p)"
         {
@@ -133,48 +182,69 @@ runs:
           echo "args=" >> "$GITHUB_OUTPUT"
         fi
 
-    # Check that the author can push here.
-    - name: Check that PR author is trusted
+    # Authors who can push are reviewed on every push; anyone else's pull request
+    # once per comment from someone who can.
+    - name: Check that the review is trusted
       id: trust
+      if: ${{ steps.pr.outputs.skip != 'true' }}
       shell: bash
       env:
-        AUTHOR: ${{ github.event.pull_request.user.login }}
-        HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         GH_TOKEN: ${{ github.token }}
+        MODE: ${{ steps.pr.outputs.mode }}
+        AUTHOR: ${{ steps.pr.outputs.author }}
+        HEAD_REPO: ${{ steps.pr.outputs.head_repo }}
+        HEAD_REF: ${{ steps.pr.outputs.head_ref }}
+        HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
+        COMMENTER: ${{ github.event.comment.user.login }}
+        COMMENTED_AT: ${{ github.event.comment.created_at }}
       run: |
-        if [ -z "$AUTHOR" ] || [ -z "$HEAD_REPO" ]; then
-          echo "::error::No pull request author or head repository in the event payload," \
-            "so trust can't be established."
-          exit 1
-        fi
-        if [ "$HEAD_REPO" = "$GITHUB_REPOSITORY" ]; then
-          echo "trusted=true" >> "$GITHUB_OUTPUT"
-          exit 0
-        fi
-        if ! PERM="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$AUTHOR/permission" \
-          --jq .permission 2>"$RUNNER_TEMP/gh-err")"; then
-          echo "::error::Can't read the permission of $AUTHOR on $GITHUB_REPOSITORY:" \
-            "$(cat "$RUNNER_TEMP/gh-err")"
-          exit 1
-        fi
-        case "$PERM" in
-        admin | write) echo "trusted=true" >> "$GITHUB_OUTPUT" ;;
-        *)
-          echo "::notice::Not reviewing a pull request from $AUTHOR, who has $PERM access."
+        untrusted() {
+          echo "::notice::Not reviewing: $*"
           echo "trusted=false" >> "$GITHUB_OUTPUT"
-          ;;
-        esac
+          exit 0
+        }
+        can_push() {
+          local perm
+          if ! perm="$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$1/permission" \
+            --jq .permission 2>"$RUNNER_TEMP/gh-err")"; then
+            echo "::error::Can't read the permission of $1 on $GITHUB_REPOSITORY:" \
+              "$(cat "$RUNNER_TEMP/gh-err")"
+            exit 1
+          fi
+          [[ "$perm" == admin || "$perm" == write ]]
+        }
+        AUTHOR_CAN_PUSH=false
+        if [[ "$HEAD_REPO" == "$GITHUB_REPOSITORY" ]] || can_push "$AUTHOR"; then
+          AUTHOR_CAN_PUSH=true
+        fi
+        if [[ "$MODE" == auto ]]; then
+          [[ "$AUTHOR_CAN_PUSH" == true ]] ||
+            untrusted "$AUTHOR cannot push here; someone who can may comment /claude-review."
+        else
+          [[ "$AUTHOR_CAN_PUSH" == false ]] || untrusted "$AUTHOR's pull requests are reviewed on every push."
+          can_push "$COMMENTER" || untrusted "$COMMENTER cannot push here."
+          # GitHub stamps the trigger workflow's run for every push; commit dates are forgeable.
+          SEEN=$(gh api --paginate -X GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/claude-review-trigger.yml/runs" \
+            -f event=pull_request -f branch="$HEAD_REF" \
+            --jq '.workflow_runs[] | {created_at, head_sha, repo: .head_repository.full_name}' |
+            jq -rs --arg repo "$HEAD_REPO" --arg at "$COMMENTED_AT" \
+              '[.[] | select(.repo == $repo and .created_at <= $at)] | max_by(.created_at) | .head_sha // empty')
+          [[ -n "$SEEN" ]] || untrusted "no push to the pull request predates $COMMENTER's comment."
+          [[ "$SEEN" == "$HEAD_SHA" ]] ||
+            untrusted "the pull request changed after $COMMENTER's comment; comment again to review $HEAD_SHA."
+        fi
+        echo "trusted=true" >> "$GITHUB_OUTPUT"
 
-    # With pull_request_target, checkout defaults to the base branch.
-    # Check out from the PR's head repository to handle fork PRs correctly.
+    # Pinned to the trusted SHA, so a later push cannot swap what is reviewed.
     - name: Checkout PR head
       if: ${{ steps.trust.outputs.trusted == 'true' }}
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
-        repository: ${{ github.event.pull_request.head.repo.full_name }}
-        ref: ${{ github.event.pull_request.head.sha }}
+        repository: ${{ steps.pr.outputs.head_repo }}
+        ref: ${{ steps.pr.outputs.head_sha }}
         persist-credentials: false
-        # The author is checked above. Risks: https://gh.io/securely-using-pull_request_target
+        # Trust is checked above. Risks: https://gh.io/securely-using-pull_request_target
         allow-unsafe-pr-checkout: true
 
     - name: Take Claude's configuration from the base branch
@@ -182,7 +252,7 @@ runs:
       shell: bash
       env:
         BASE_REPO: ${{ github.repository }}
-        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        BASE_SHA: ${{ steps.pr.outputs.base_sha }}
         FETCH_TOKEN: ${{ github.token }}
       run: |
         # Write credentials into the local git config rather than the command line
@@ -192,7 +262,7 @@ runs:
         git config --local "http.https://github.com/.extraheader" "AUTHORIZATION: basic $AUTH_HEADER"
         trap 'git config --local --unset "http.https://github.com/.extraheader" 2>/dev/null || true' EXIT
         git fetch --depth=1 --no-recurse-submodules "https://github.com/$BASE_REPO" "$BASE_SHA"
-        rm -rf -- .github/copilot-instructions.md .mcp.json
+        rm -rf -- .github/copilot-instructions.md .mcp.json .claude.json .ripgreprc .gitmodules .husky
         if git cat-file -e "FETCH_HEAD:.github/copilot-instructions.md" 2>/dev/null; then
           git checkout FETCH_HEAD -- .github/copilot-instructions.md
         fi
@@ -213,7 +283,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
         REPOSITORY: ${{ github.repository }}
         WORK: ${{ runner.temp }}/review-history-work
         DIR: ${{ runner.temp }}/review-history
@@ -306,10 +376,10 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
         REPOSITORY: ${{ github.repository }}
-        BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        BASE_SHA: ${{ steps.pr.outputs.base_sha }}
+        HEAD_SHA: ${{ steps.pr.outputs.head_sha }}
         WORK: ${{ runner.temp }}/pr-diff-work
         DIR: ${{ runner.temp }}/pr-diff
       run: |
@@ -399,7 +469,7 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
         REPOSITORY: ${{ github.repository }}
         OUTCOME: ${{ steps.claude.outcome }}
         DIFF_ERROR: ${{ steps.diff.outputs.error }}
@@ -463,7 +533,7 @@ runs:
         OUTCOME: ${{ steps.claude.outcome }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
         BUDGET: ${{ inputs.budget }}
-        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        PR_NUMBER: ${{ steps.pr.outputs.number }}
         DIR: ${{ runner.temp }}/review-history
         DIFF_DIR: ${{ runner.temp }}/pr-diff
         POSTED: ${{ steps.submit.outputs.comments }}

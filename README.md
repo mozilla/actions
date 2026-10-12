@@ -46,8 +46,9 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to review a pull request through the GitHub review API.
-Fork pull requests are reviewed only if the author has write access, since reviewing one means
-checking out its code; others are skipped and the job still passes.
+Pull requests by authors with write access, forks included, are reviewed on every push. Anyone
+else's pull request is reviewed once each time someone with write access comments `/claude-review`,
+and only if no push landed after the comment. Other runs are skipped and the job still passes.
 
 It runs the built-in `code-review` skill, then domain passes for `unsafe`/FFI soundness, untrusted
 input, crypto and TLS, protocol attacks, specification conformance, contract misuse and behavioral
@@ -56,15 +57,20 @@ points a prior review already made are not re-raised. Every run posts one review
 never reads as a clean one.
 
 Claude takes `.claude` and `.github/copilot-instructions.md` from the base branch, and ignores
-`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json`.
+`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md`, `.mcp.json`, `.claude.json`, `.ripgreprc`,
+`.gitmodules` and `.husky`.
 
 > [!NOTE]
 > Requires an `ANTHROPIC_API_KEY` repository secret.
 
-Copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml) into your
-repository, or call it as a
+Copy [`.github/workflows/claude-review-trigger.yml`](.github/workflows/claude-review-trigger.yml)
+into your repository under that name; the review runs when it completes and times pushes against
+comments with it. Then copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml)
+too, or call it as a
 [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) with
-`secrets: inherit`. To customize, use the composite action directly:
+`secrets: inherit` from a workflow triggered the same way. GitHub only runs `workflow_run` and
+`issue_comment` workflows from the default branch, so changes to them take effect once merged. To
+customize, use the composite action directly:
 
 ```yaml
 - uses: mozilla/actions/claude-review
@@ -73,14 +79,9 @@ repository, or call it as a
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
-That means supplying the concurrency group yourself. Runs on one pull request share a pending
-review, so key it by pull request alone:
-
-```yaml
-concurrency:
-  group: claude-review-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
-```
+That means supplying the triggers, job condition and concurrency group yourself; copy them from
+`claude-review.yml`. Runs on one pull request share a pending review, so the group must not let two
+run at once.
 
 | Input               | Default      | Description                                        |
 | ------------------- | ------------ | -------------------------------------------------- |
@@ -239,9 +240,9 @@ jobs:
 ### `claude-review.yml` — Claude Code Review
 
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
-self-contained workflow. Handles the `pull_request_target` trigger and permission gating
-(`OWNER`/`MEMBER`/`COLLABORATOR` only), and cancels a superseded run on the same pull request.
-Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
+self-contained workflow. Runs on `workflow_run` after `claude-review-trigger.yml` and on
+`/claude-review` comments, and cancels a superseded run on the same pull request. Can be copied
+directly into a repository or called as a reusable workflow with `secrets: inherit`.
 To customize model, budget, or prompt, use the composite action directly.
 
 ### `deny.yml` — cargo deny

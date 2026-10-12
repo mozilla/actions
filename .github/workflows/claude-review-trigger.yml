@@ -1,0 +1,15 @@
+name: Claude Code Review Trigger
+# Without secrets, so safe for forks. Its completion starts claude-review.yml, and its runs
+# time each push for /claude-review comments.
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+permissions: {}
+
+jobs:
+  trigger:
+    name: Trigger Claude Code Review
+    runs-on: ubuntu-24.04
+    steps:
+      - run: "true"
