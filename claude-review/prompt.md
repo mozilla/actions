@@ -55,10 +55,16 @@ Do not report that a previous issue is now resolved. The resolved mark is the re
 
 Invoke the `code-review` skill with the pull request number named above and `high` as its
 arguments. The skill's recipe reaches for `git diff` and `gh`; neither is available here — the
-checkout is a shallow single commit with no base ref, and there is no shell. Use
-`mcp__github__get_pull_request_diff` for the diff and `mcp__github__get_pull_request_files` for
-the file list, paging the latter to the end — it returns one page at a time. Tell any subagent
-you start to do the same.
+checkout is a shallow single commit with no base ref, and there is no shell. Read the diff index
+named above instead. It has a `count` and one `files` entry per changed file, with its status,
+line counts and `diff`: a file in the index's own directory holding that file's diff. Check the
+entries you loaded against `count`, and read every `diff` file. A `diff` of `null` means GitHub
+returned none, as for a binary or very large file; read that file in the workspace. If a read
+reports truncation, finish it with `offset` and `limit`. Give any subagent you start the index
+path and these instructions.
+
+If the diff index has an `error` key, or you cannot read it, the diff is unavailable. Review
+nothing, create no pending review, and make your last message one line saying so.
 
 Do **not** pass `--comment` or `--fix`: you own posting, it does not. Ignore any follow-up skill
 it proposes when it finishes. Carry its findings into step 5. If the skill cannot run, say so in

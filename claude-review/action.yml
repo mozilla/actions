@@ -80,6 +80,7 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
         INDEX: ${{ runner.temp }}/review-history/index.json
+        DIFF_INDEX: ${{ runner.temp }}/pr-diff/index.json
       run: |
         if [[ -z "$PR_NUMBER" ]]; then
           echo "::error::Claude Code Review must run on a pull request event, or another event that provides a pull request number."
@@ -94,8 +95,9 @@ runs:
           echo "You are reviewing pull request #${PR_NUMBER} in repository ${REPOSITORY}."
           echo "IMPORTANT: Post all review comments exclusively to pull request #${PR_NUMBER}."
           echo "You may read other pull requests for context, but do not post comments to them."
-          echo "The workspace's Claude configuration was replaced with the base branch's, so use the pull request diff tools rather than git diff for the changes under review."
+          echo "The workspace's Claude configuration was replaced with the base branch's, so do not use git diff for the changes under review."
           echo "This pull request's complete review history was fetched to ${INDEX}; step 2 below means that file."
+          echo "This pull request's diff was fetched to ${DIFF_INDEX}; step 3 below means that file."
           echo ""
           cat "$ACTION_PATH/prompt.md"
           if [[ -n "$EXTRA_PROMPT" ]]; then
@@ -297,6 +299,45 @@ runs:
         done
         jq -s 'add' "$WORK/index.ndjson" > "$DIR/index.json" || fail "index"
 
+    # Claude Code saves MCP results over 50,000 characters outside the Read allowlist.
+    - name: Fetch pull request diff
+      if: ${{ steps.trust.outputs.trusted == 'true' }}
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
+        REPOSITORY: ${{ github.repository }}
+        WORK: ${{ runner.temp }}/pr-diff-work
+        DIR: ${{ runner.temp }}/pr-diff
+      run: |
+        PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
+        mkdir -p "$WORK" "$DIR"
+        FILES="$WORK/files.json"
+        warn() { echo "::warning::$*"; echo "- :warning: $*" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
+        # The outcome check fails the job on this.
+        fail() {
+          warn "Could not read the pull request diff ($1), so the change was not reviewed."
+          jq -n --arg reason "$1" '{error: $reason}' > "$DIR/index.json"
+          exit 0
+        }
+        EXPECTED=$(gh api "$PR" --jq '.changed_files') || fail "pull request"
+        # The files API stops at 3000 files; the count check catches that.
+        gh api --paginate --jq '.[]' "$PR/files" | jq -s '.' > "$FILES" || fail "files"
+        N=$(jq 'length' "$FILES") || fail "files"
+        if [[ "$N" -lt "$EXPECTED" ]]; then
+          fail "only $N of $EXPECTED files"
+        fi
+        # Named by position, as paths are untrusted. No patch for binary or very large files.
+        for i in $(jq -r 'to_entries[] | select(.value.patch) | .key' "$FILES"); do
+          jq -r --argjson i "$i" '.[$i].patch' "$FILES" > "$DIR/$i.diff" || fail "diff $i"
+        done
+        jq '{count: length, files: [to_entries[] | {path: .value.filename,
+          previous_path: .value.previous_filename, status: .value.status,
+          additions: .value.additions, deletions: .value.deletions,
+          diff: (if .value.patch then "\(.key).diff" else null end)}]}' "$FILES" \
+          > "$DIR/index.json" || fail "index"
+        echo "Diff: $N files, $(jq '[.files[] | select(.diff)] | length' "$DIR/index.json") with a patch."
+
     - name: Run Claude Code Review
       id: claude
       if: ${{ steps.trust.outputs.trusted == 'true' }}
@@ -324,10 +365,10 @@ runs:
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --append-system-prompt "There is no shell, and no base ref to diff against. Get a pull request's diff from mcp__github__get_pull_request_diff and its file list from mcp__github__get_pull_request_files, never from git or gh. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
+          --append-system-prompt "There is no shell, and no base ref to diff against. The pull request's diff is in ${{ runner.temp }}/pr-diff: index.json lists every changed file and names the file in that directory holding its diff. Read it there, never from git, gh or MCP. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
           --allowedTools Skill Agent Task ReportFindings
           --allowedTools "Read(/${{ github.workspace }}/**)" "Glob(/${{ github.workspace }}/**)" "Grep(/${{ github.workspace }}/**)"
-          --allowedTools "Read(/${{ runner.temp }}/review-history/**)"
+          --allowedTools "Read(/${{ runner.temp }}/review-history/**)" "Read(/${{ runner.temp }}/pr-diff/**)"
           ${{ steps.web.outputs.args }}
           --allowedTools mcp__github__create_pending_pull_request_review,mcp__github__add_comment_to_pending_review
           --allowedTools mcp__github__get_pull_request,mcp__github__get_pull_request_diff,mcp__github__get_pull_request_files,mcp__github__get_pull_request_status,mcp__github__list_pull_requests,mcp__github__search_pull_requests
@@ -405,6 +446,7 @@ runs:
         BUDGET: ${{ inputs.budget }}
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         DIR: ${{ runner.temp }}/review-history
+        DIFF_DIR: ${{ runner.temp }}/pr-diff
         POSTED: ${{ steps.submit.outputs.comments }}
         URL: ${{ steps.submit.outputs.url }}
       run: |
@@ -463,14 +505,23 @@ runs:
           if [[ "$SKILL_CALLS" -gt 0 && "$DENIALS" -gt 0 ]]; then
             warn "The code-review skill ran with $DENIALS denial(s), so the correctness pass may have produced nothing. Check the denied tools above."
           fi
+          # Distinct files read under a fetched directory, its index aside.
+          reads_under() {
+            jq --arg d "$1/" '[.[] | select((.name // "") == "Read")
+              | (.input.file_path // "")
+              | select(startswith($d) and (endswith("index.json") | not))] | unique | length' \
+              <<< "$USES" 2>/dev/null || echo 0
+          }
           SHARDS=$(jq -r '[.[] | .files // []] | flatten | length' "$DIR/index.json" 2>/dev/null || echo 0)
-          READ_SHARDS=$(jq --arg d "$DIR/" '[.[] | select((.name // "") == "Read")
-            | (.input.file_path // "")
-            | select(startswith($d) and (endswith("index.json") | not))] | unique | length' \
-            <<< "$USES" 2>/dev/null || echo 0)
+          READ_SHARDS=$(reads_under "$DIR")
           # A skipped pull request reads nothing.
           if [[ "$SKILL_CALLS" -gt 0 && "$READ_SHARDS" -lt "$SHARDS" ]]; then
             warn "Claude read $READ_SHARDS of the $SHARDS review-history files, so the suppression ledger was built from a partial history."
+          fi
+          DIFFS=$(jq '[.files[]? | select(.diff)] | length' "$DIFF_DIR/index.json" 2>/dev/null || echo 0)
+          READ_DIFFS=$(reads_under "$DIFF_DIR")
+          if [[ "$SKILL_CALLS" -gt 0 && "$READ_DIFFS" -lt "$DIFFS" ]]; then
+            warn "Claude read $READ_DIFFS of the $DIFFS diff files, so part of the change went unreviewed."
           fi
           BAD_EVENT=$(jq -r '[.[] | select((.name // "")
             | endswith("submit_pending_pull_request_review"))
@@ -480,6 +531,12 @@ runs:
           if [[ -n "$BAD_EVENT" ]]; then
             warn "Claude tried to submit a review with event '$BAD_EVENT', which prompt.md forbids and the allowlist denies. Possible prompt injection."
           fi
+        fi
+        # A review without the diff must not pass as a clean one.
+        DIFF_ERR=$(jq -r '.error // empty' "$DIFF_DIR/index.json" 2>/dev/null || echo "no index")
+        if [[ -n "$DIFF_ERR" ]]; then
+          echo "::error::The pull request diff was unavailable ($DIFF_ERR), so the change was not reviewed."
+          exit 1
         fi
         # The conclusion output is unset when the action throws.
         # A budget cap is expected.
