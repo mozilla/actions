@@ -81,7 +81,7 @@ customize, use the composite action directly:
 
 That means supplying the triggers, job condition and concurrency group yourself; copy them from
 `claude-review.yml`. Runs on one pull request share a pending review, so the group must not let two
-run at once.
+run at once. Put it on the job: at the workflow level, any comment would cancel a running review.
 
 | Input               | Default      | Description                                        |
 | ------------------- | ------------ | -------------------------------------------------- |

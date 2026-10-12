@@ -229,7 +229,7 @@ runs:
             -f event=pull_request -f branch="$HEAD_REF" \
             --jq '.workflow_runs[] | {created_at, head_sha, repo: .head_repository.full_name}' |
             jq -rs --arg repo "$HEAD_REPO" --arg at "$COMMENTED_AT" \
-              '[.[] | select(.repo == $repo and .created_at <= $at)] | max_by(.created_at) | .head_sha // empty')
+              '[.[] | select(.repo == $repo and .created_at < $at)] | max_by(.created_at) | .head_sha // empty')
           [[ -n "$SEEN" ]] || untrusted "no push to the pull request predates $COMMENTER's comment."
           [[ "$SEEN" == "$HEAD_SHA" ]] ||
             untrusted "the pull request changed after $COMMENTER's comment; comment again to review $HEAD_SHA."
