@@ -228,7 +228,7 @@ runs:
           # GitHub stamps the trigger workflow's run for every push; commit dates are forgeable.
           SEEN=$(gh api --paginate -X GET \
             "repos/$GITHUB_REPOSITORY/actions/workflows/claude-review-trigger.yml/runs" \
-            -f event=pull_request -f branch="$HEAD_REF" \
+            -f event=pull_request -f branch="$HEAD_REF" -f created="<$COMMENTED_AT" \
             --jq '.workflow_runs[] | {created_at, head_sha, repo: .head_repository.full_name}' |
             jq -rs --arg repo "$HEAD_REPO" --arg at "$COMMENTED_AT" \
               '[.[] | select(.repo == $repo and .created_at < $at)] | max_by(.created_at) | .head_sha // empty')
