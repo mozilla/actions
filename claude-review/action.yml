@@ -98,8 +98,10 @@ runs:
           MODE=auto
           PR_NUMBER=$(gh api -X GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f head="$RUN_OWNER:$RUN_BRANCH" |
             jq -r --arg sha "$RUN_SHA" --arg repo "$GITHUB_REPOSITORY" \
-              'first(.[] | select(.head.sha == $sha and .base.repo.full_name == $repo) | .number) // empty')
+              '[.[] | select(.head.sha == $sha and .base.repo.full_name == $repo) | .number | tostring] | join(" ")')
           [[ -n "$PR_NUMBER" ]] || skip "no open pull request from $RUN_OWNER:$RUN_BRANCH is at $RUN_SHA."
+          # The trigger workflow comes from the pull request, so nothing in its run can disambiguate.
+          [[ "$PR_NUMBER" != *" "* ]] || skip "pull requests $PR_NUMBER share $RUN_OWNER:$RUN_BRANCH at $RUN_SHA."
           ;;
         *)
           echo "::error::Claude Code Review must run on a workflow_run, issue_comment or pull_request_target event."
@@ -230,9 +232,9 @@ runs:
             --jq '.workflow_runs[] | {created_at, head_sha, repo: .head_repository.full_name}' |
             jq -rs --arg repo "$HEAD_REPO" --arg at "$COMMENTED_AT" \
               '[.[] | select(.repo == $repo and .created_at < $at)] | max_by(.created_at) | .head_sha // empty')
-          [[ -n "$SEEN" ]] || untrusted "no push to the pull request predates $COMMENTER's comment."
+          [[ -n "$SEEN" ]] || untrusted "no push to the pull request predates $COMMENTER's comment, or it has a merge conflict."
           [[ "$SEEN" == "$HEAD_SHA" ]] ||
-            untrusted "the pull request changed after $COMMENTER's comment; comment again to review $HEAD_SHA."
+            untrusted "the pull request changed after $COMMENTER's comment, or has a merge conflict; resolve it and comment again to review $HEAD_SHA."
         fi
         echo "trusted=true" >> "$GITHUB_OUTPUT"
 

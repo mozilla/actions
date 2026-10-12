@@ -48,7 +48,9 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 Runs [Claude Code](https://claude.ai/code) to review a pull request through the GitHub review API.
 Pull requests by authors with write access, forks included, are reviewed on every push. Anyone
 else's pull request is reviewed once each time someone with write access comments `/claude-review`,
-and only if no push landed after the comment. Other runs are skipped and the job still passes.
+and only if no push landed after the comment. GitHub starts no `pull_request` runs for a pull request
+with a merge conflict, so it is reviewed once the conflict is resolved. Other runs are skipped and
+the job still passes.
 
 It runs the built-in `code-review` skill, then domain passes for `unsafe`/FFI soundness, untrusted
 input, crypto and TLS, protocol attacks, specification conformance, contract misuse and behavioral
