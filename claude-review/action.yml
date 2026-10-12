@@ -301,6 +301,7 @@ runs:
 
     # Claude Code saves MCP results over 50,000 characters outside the Read allowlist.
     - name: Fetch pull request diff
+      id: diff
       if: ${{ steps.trust.outputs.trusted == 'true' }}
       shell: bash
       env:
@@ -316,10 +317,11 @@ runs:
         mkdir -p "$WORK" "$DIR"
         FILES="$WORK/files.json"
         warn() { echo "::warning::$*"; echo "- :warning: $*" >> "${GITHUB_STEP_SUMMARY:-/dev/null}"; }
-        # The outcome check fails the job on this.
+        # The review says so, and the outcome check fails the job.
         fail() {
           warn "Could not read the pull request diff ($1), so the change was not reviewed."
           jq -n --arg reason "$1" '{error: $reason}' > "$DIR/index.json"
+          echo "error=$1" >> "$GITHUB_OUTPUT"
           exit 0
         }
         EXPECTED=$(gh api "$PR" --jq '.changed_files') || fail "pull request"
@@ -334,7 +336,7 @@ runs:
           previous_path: .value.previous_filename, status: .value.status,
           additions: .value.additions, deletions: .value.deletions,
           diff: (if .value.patch then "\(.key).diff" else null end),
-          base: (if .value.patch or .value.status == "added" then null else "\(.key).base" end)}]}' \
+          base: (if .value.patch or .value.status == "added" or (.value.status == "renamed" and .value.changes == 0) then null else "\(.key).base" end)}]}' \
           "$FILES" > "$DIR/index.json" || fail "index"
         jq -r 'to_entries[] | select(.value.patch) | "\(.key)\t\(.value.patch | @base64)"' "$FILES" |
           while IFS=$'\t' read -r i p; do base64 -d <<< "$p" > "$DIR/$i.diff"; done || fail "diffs"
@@ -400,6 +402,7 @@ runs:
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
         OUTCOME: ${{ steps.claude.outcome }}
+        DIFF_ERROR: ${{ steps.diff.outputs.error }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
       run: |
         PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
@@ -433,6 +436,9 @@ runs:
         fi
         if [[ "$OUTCOME" != "success" ]]; then
           BODY="$BODY"$'\n\n'"> [!WARNING]"$'\n'"> Review did not finish (\`$OUTCOME\`); it may be incomplete."
+        fi
+        if [[ -n "$DIFF_ERROR" ]]; then
+          BODY="$BODY"$'\n\n'"> [!WARNING]"$'\n'"> The diff could not be read (\`$DIFF_ERROR\`), so the change was not reviewed."
         fi
         if [[ -n "$ID" ]]; then
           # Submitting a review Claude left pending keeps its inline comments.
