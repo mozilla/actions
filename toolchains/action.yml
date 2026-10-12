@@ -6,7 +6,7 @@ branding:
 
 inputs:
   working-directory:
-    description: "Directory containing the Cargo.toml to read MSRV from"
+    description: "Directory containing the Cargo.toml to read the MSRV from"
     default: "."
 
 outputs:
