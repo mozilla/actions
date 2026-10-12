@@ -23,4 +23,4 @@ runs:
       working-directory: ${{ inputs.working-directory }}
       run: |
         msrv="$(cargo metadata --format-version 1 --no-deps | jq -r '[.packages[].rust_version | select(. != null)] | min')"
-        echo "toolchains=[\"$msrv\", \"stable\", \"nightly\"]" >> "$GITHUB_OUTPUT"
+        echo "toolchains=[\"$msrv\", \"stable\", \"beta, \"nightly\"]" >> "$GITHUB_OUTPUT"
