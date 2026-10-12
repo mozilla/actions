@@ -247,7 +247,7 @@ runs:
                   "start_side": {"enum": ["LEFT", "RIGHT"]},
                   "body": {"type": "string"}}}}}}'
           --allowedTools Skill Agent Task ReportFindings
-          --allowedTools "Bash(gh pr diff:*)" "Bash(gh pr view:*)" "Bash(gh issue view:*)"
+          --allowedTools "Bash(gh pr diff:*)" "Bash(gh pr view:*)" "Bash(gh issue view:*)" "Bash(gh release view:*)"
           --allowedTools "Read(/${{ runner.temp }}/review-history.json)" "Read(~/.claude/projects/**)"
           ${{ steps.web.outputs.args }}
         prompt: ${{ steps.prompt.outputs.content }}
