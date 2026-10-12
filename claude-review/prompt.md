@@ -57,11 +57,12 @@ Invoke the `code-review` skill with the pull request number named above and `hig
 arguments. The skill's recipe reaches for `git diff` and `gh`; neither is available here — the
 checkout is a shallow single commit with no base ref, and there is no shell. Read the diff index
 named above instead. It has a `count` and one `files` entry per changed file, with its status,
-line counts and `diff`: a file in the index's own directory holding that file's diff. Check the
-entries you loaded against `count`, and read every `diff` file. A `diff` of `null` means GitHub
-returned none, as for a binary or very large file; read that file in the workspace. If a read
-reports truncation, finish it with `offset` and `limit`. Give any subagent you start the index
-path and these instructions.
+line counts, `diff` and `base`, naming files in the index's own directory. Check the entries you
+loaded against `count`, and read every `diff` and `base` file. A `diff` is the file's change;
+GitHub gives none for binary or very large files. Those have a `base` instead, the version before
+the change, unless the file was added: compare it with the workspace copy, which a removed file
+lacks. If a read reports truncation, finish it with `offset` and `limit`. Give any subagent you
+start the index path and these instructions.
 
 If the diff index has an `error` key, or you cannot read it, the diff is unavailable. Review
 nothing, create no pending review, and make your last message one line saying so.

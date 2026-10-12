@@ -230,9 +230,9 @@ runs:
           jq -n --arg reason "$1" '{error: $reason}' > "$DIR/index.json"
           exit 0
         }
-        stream() { gh api --paginate --jq '.[]' "$1"; }
+        stream() { gh api --paginate --jq '.[]' "$1?per_page=100"; }
         # After this, any pending review is ours.
-        STALE=$(gh api --paginate "$PR/reviews" --jq '.[] | select(.state == "PENDING") | .id' 2>/dev/null | tail -n1 || echo "")
+        STALE=$(stream "$PR/reviews" 2>/dev/null | jq -r 'select(.state == "PENDING") | .id' | tail -n1 || echo "")
         if [[ -n "$STALE" ]]; then
           echo "Deleting pending review $STALE left by an earlier run."
           gh api --method DELETE "$PR/reviews/$STALE" >/dev/null 2>&1 || true
@@ -307,6 +307,8 @@ runs:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number || github.event.number }}
         REPOSITORY: ${{ github.repository }}
+        BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         WORK: ${{ runner.temp }}/pr-diff-work
         DIR: ${{ runner.temp }}/pr-diff
       run: |
@@ -322,20 +324,31 @@ runs:
         }
         EXPECTED=$(gh api "$PR" --jq '.changed_files') || fail "pull request"
         # The files API stops at 3000 files; the count check catches that.
-        gh api --paginate --jq '.[]' "$PR/files" | jq -s '.' > "$FILES" || fail "files"
+        gh api --paginate --jq '.[]' "$PR/files?per_page=100" | jq -s '.' > "$FILES" || fail "files"
         N=$(jq 'length' "$FILES") || fail "files"
         if [[ "$N" -lt "$EXPECTED" ]]; then
           fail "only $N of $EXPECTED files"
         fi
-        # Named by position, as paths are untrusted. No patch for binary or very large files.
-        for i in $(jq -r 'to_entries[] | select(.value.patch) | .key' "$FILES"); do
-          jq -r --argjson i "$i" '.[$i].patch' "$FILES" > "$DIR/$i.diff" || fail "diff $i"
-        done
+        # Named by position: paths are untrusted. No patch for binary or very large files.
         jq '{count: length, files: [to_entries[] | {path: .value.filename,
           previous_path: .value.previous_filename, status: .value.status,
           additions: .value.additions, deletions: .value.deletions,
-          diff: (if .value.patch then "\(.key).diff" else null end)}]}' "$FILES" \
-          > "$DIR/index.json" || fail "index"
+          diff: (if .value.patch then "\(.key).diff" else null end),
+          base: (if .value.patch or .value.status == "added" then null else "\(.key).base" end)}]}' \
+          "$FILES" > "$DIR/index.json" || fail "index"
+        jq -r 'to_entries[] | select(.value.patch) | "\(.key)\t\(.value.patch | @base64)"' "$FILES" |
+          while IFS=$'\t' read -r i p; do base64 -d <<< "$p" > "$DIR/$i.diff"; done || fail "diffs"
+        BASES=$(jq -r '.files[] | select(.base)
+          | "\(.base)\t\(.previous_path // .path | split("/") | map(@uri) | join("/"))"' "$DIR/index.json")
+        if [[ -n "$BASES" ]]; then
+          # Pull request diffs start at the merge base, not the base branch.
+          MB=$(gh api "repos/$REPOSITORY/compare/$BASE_SHA...$HEAD_SHA" --jq .merge_base_commit.sha) ||
+            fail "merge base"
+          while IFS=$'\t' read -r f p; do
+            gh api -H 'Accept: application/vnd.github.raw+json' "repos/$REPOSITORY/contents/$p?ref=$MB" \
+              > "$DIR/$f" || fail "$f"
+          done <<< "$BASES"
+        fi
         echo "Diff: $N files, $(jq '[.files[] | select(.diff)] | length' "$DIR/index.json") with a patch."
 
     - name: Run Claude Code Review
@@ -365,7 +378,7 @@ runs:
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --append-system-prompt "There is no shell, and no base ref to diff against. The pull request's diff is in ${{ runner.temp }}/pr-diff: index.json lists every changed file and names the file in that directory holding its diff. Read it there, never from git, gh or MCP. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
+          --append-system-prompt "There is no shell, and no base ref to diff against. The pull request's diff is in ${{ runner.temp }}/pr-diff: index.json lists every changed file and names the file in that directory holding its diff, or its prior version when there is no diff. Read it there, never from git, gh or MCP. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep."
           --allowedTools Skill Agent Task ReportFindings
           --allowedTools "Read(/${{ github.workspace }}/**)" "Glob(/${{ github.workspace }}/**)" "Grep(/${{ github.workspace }}/**)"
           --allowedTools "Read(/${{ runner.temp }}/review-history/**)" "Read(/${{ runner.temp }}/pr-diff/**)"
@@ -518,7 +531,7 @@ runs:
           if [[ "$SKILL_CALLS" -gt 0 && "$READ_SHARDS" -lt "$SHARDS" ]]; then
             warn "Claude read $READ_SHARDS of the $SHARDS review-history files, so the suppression ledger was built from a partial history."
           fi
-          DIFFS=$(jq '[.files[]? | select(.diff)] | length' "$DIFF_DIR/index.json" 2>/dev/null || echo 0)
+          DIFFS=$(jq '[.files[]? | .diff, .base | select(.)] | length' "$DIFF_DIR/index.json" 2>/dev/null || echo 0)
           READ_DIFFS=$(reads_under "$DIFF_DIR")
           if [[ "$SKILL_CALLS" -gt 0 && "$READ_DIFFS" -lt "$DIFFS" ]]; then
             warn "Claude read $READ_DIFFS of the $DIFFS diff files, so part of the change went unreviewed."
