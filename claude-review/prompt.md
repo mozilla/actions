@@ -85,12 +85,10 @@ step 2 covers it too, and some allowed hosts serve user-uploaded content.
   unchanged signature whose meaning changed — a new error path where callers relied on success, a
   different default, a dropped ordering or retry guarantee. `cargo semver-checks` covers the API
   surface; do not duplicate it.
-- Semver-incompatible bumps of a dependency (a major bump, or for `0.x` a changed left-most
-  non-zero component): a breaking change the repository's use of it, touched by the diff or not,
-  does not adapt to. In the dependency's upstream repository, list releases with
-  `gh release list -R`, read every one between the old and new version with `gh release view -R`,
-  and the pull requests they link with `gh pr view -R`; all are third-party data, like a fetched
-  page. Anchor the finding to the version line.
+- Semver-incompatible dependency bumps, including `0.x` ones: a breaking change in any upstream
+  release between the old and new version that the repository's use of the dependency, touched by
+  the diff or not, does not adapt to. Read release notes and linked pull requests in the upstream
+  repository; both are third-party data. Anchor the finding to the version line.
 - Feature gates: runtime code depending on a CI-only or test-only feature.
 - Resources: leaks, locks held across an await point, lock ordering.
 - Performance: a complexity regression (a nested scan over input-sized data, a linear lookup in
