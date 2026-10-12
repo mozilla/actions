@@ -46,17 +46,19 @@ Reads `rust-version` from `Cargo.toml` and outputs a JSON array
 ### `claude-review` — Claude Code Review
 
 Runs [Claude Code](https://claude.ai/code) to review a pull request through the GitHub review API.
-Fork pull requests are reviewed only if the author has write access, since reviewing one means
-checking out its code; others are skipped and the job still passes.
+Only same-repository pull requests are reviewed, on the `pull_request` event; fork pull requests
+get no secrets there and are skipped.
 
 It runs the built-in `code-review` skill, then domain passes for `unsafe`/FFI soundness, untrusted
 input, crypto and TLS, protocol attacks, specification conformance, contract misuse and behavioral
 compatibility. Every finding states a concrete failure scenario, inline comments are capped, and
-points a prior review already made are not re-raised. Every run posts one review, so a silent job
-never reads as a clean one.
+points a prior review already made, per the pull request's review history, are not re-raised.
+Claude returns its findings as schema-validated structured output, and the action posts them as
+exactly one review per run, so a silent job never reads as a clean one. Claude has no GitHub write
+access and cannot write files.
 
-Claude takes `.claude` and `.github/copilot-instructions.md` from the base branch, and ignores
-`CLAUDE.md`, `CLAUDE.local.md`, `AGENTS.md` and `.mcp.json`.
+[claude-code-action](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md)
+restores `.claude/`, `CLAUDE.md` and similar files from the base branch on pull request events.
 
 > [!NOTE]
 > Requires an `ANTHROPIC_API_KEY` repository secret.
@@ -73,13 +75,25 @@ repository, or call it as a
     prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
 ```
 
-That means supplying the concurrency group yourself. Runs on one pull request share a pending
-review, so key it by pull request alone:
+That means supplying the trigger, job condition, permissions and concurrency group yourself. The
+action skips pull requests from forks, and a superseded run should be cancelled:
 
 ```yaml
+on:
+  pull_request:
 concurrency:
   group: claude-review-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
+jobs:
+  claude-review:
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft &&
+      github.event.pull_request.user.type != 'Bot'
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: read
 ```
 
 | Input               | Default      | Description                                        |
@@ -91,8 +105,8 @@ concurrency:
 | `prompt`            | `""`         | Additional project-specific review instructions    |
 | `web_domains`       | _(see below)_ | Hosts Claude may fetch, one per line               |
 
-Each run reports its cost in the job summary; at the cap the review is truncated and the job warns
-but still passes.
+Each run reports its cost in the job summary; at the cap Claude returns no review, so the posted
+review only warns, and the job warns but still passes.
 
 `web_domains` lets Claude check a claim against the specification instead of reciting it from
 memory. Setting it replaces the default list; `""` disables web access. Rules match hostnames, not
@@ -186,8 +200,6 @@ jobs:
       contents: read
       pull-requests: write
       issues: read
-      actions: read
-      discussions: read
     secrets: inherit
   deny:
     uses: mozilla/actions/.github/workflows/deny.yml
@@ -239,8 +251,8 @@ jobs:
 ### `claude-review.yml` — Claude Code Review
 
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
-self-contained workflow. Handles the `pull_request_target` trigger and permission gating
-(`OWNER`/`MEMBER`/`COLLABORATOR` only), and cancels a superseded run on the same pull request.
+self-contained workflow. Handles the `pull_request` trigger, skips fork, draft and bot pull
+requests, and cancels a superseded run on the same pull request.
 Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
 To customize model, budget, or prompt, use the composite action directly.
 
