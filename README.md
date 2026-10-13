@@ -84,6 +84,7 @@ jobs:
       github.event.pull_request.head.repo.full_name == github.repository &&
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       pull-requests: read
@@ -99,6 +100,7 @@ jobs:
   claude-post:
     needs: claude-review
     if: ${{ !cancelled() && needs.claude-review.outputs.review != '' }}
+    runs-on: ubuntu-24.04
     permissions:
       pull-requests: write
     steps:
