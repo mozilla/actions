@@ -271,7 +271,6 @@ runs:
       if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
       shell: bash
       env:
-        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         OUTCOME: ${{ steps.claude.outcome }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
         # Unset unless Claude succeeded with output matching the schema.
@@ -313,13 +312,13 @@ runs:
         fi
         # Every run posts a review; only a returned, empty review claims no findings.
         build() {
-          jq -n --arg sha "$HEAD_SHA" --arg note "$NOTE" --argjson fold "$1" '
+          jq -n --arg note "$NOTE" --argjson fold "$1" '
             (env.STRUCTURED | if . == "" then null else fromjson end) as $r
             | ($r.comments // [] | map({path, line, side: (.side // "RIGHT"), body}
               + (if .start_line then {start_line, start_side: (.start_side // .side // "RIGHT")} else {} end))) as $c
             | (if $fold then [$c[] | "**\(.path):\(if .start_line then "\(.start_line)-" else "" end)\(.line)**\n\n\(.body)"]
                else [] end) as $folded
-            | {commit_id: $sha, comments: (if $fold then [] else $c end),
+            | {comments: (if $fold then [] else $c end),
                body: ([if $r == null or $r.body != "" then $r.body // ""
                        elif ($c | length) == 0 then "_No findings._"
                        elif $fold then ""

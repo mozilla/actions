@@ -1,8 +1,5 @@
 name: Post Claude Code Review
 description: Posts the review from claude-review, in a job with pull-requests write.
-branding:
-  icon: eye
-  color: purple
 
 inputs:
   review:
@@ -19,11 +16,12 @@ runs:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REPOSITORY: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         REVIEW: ${{ inputs.review }}
       run: |
         PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
         post() {
-          jq --arg key "$1" '.[$key] + {event: "COMMENT"}' <<< "$REVIEW" |
+          jq --arg key "$1" --arg sha "$HEAD_SHA" '.[$key] + {commit_id: $sha, event: "COMMENT"}' <<< "$REVIEW" |
             gh api --method POST "$PR/reviews" --input - --jq .html_url
         }
         POSTED=$(jq '.review.comments | length' <<< "$REVIEW") || {
