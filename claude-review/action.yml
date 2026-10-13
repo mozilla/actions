@@ -1,5 +1,5 @@
 name: Claude Code Review
-description: Runs Claude Code Review on a pull request.
+description: Runs Claude Code Review on a pull request; claude-review/post posts the result.
 branding:
   icon: eye
   color: purple
@@ -67,6 +67,13 @@ inputs:
       rustsec.org
       osv.dev
 
+outputs:
+  review:
+    description: >
+      The redacted review for claude-review/post, which needs pull-requests: write. Empty when the
+      pull request was not reviewed.
+    value: ${{ steps.result.outputs.review }}
+
 runs:
   using: composite
   steps:
@@ -132,20 +139,23 @@ runs:
         ref: ${{ github.event.pull_request.head.sha }}
         persist-credentials: false
 
-    - name: Fetch sanitizer
+    # The runner downloads the claude-code-action used below before the first step.
+    - name: Find sanitizer
+      id: sanitizer
       if: ${{ steps.prompt.outputs.skip != 'true' }}
       shell: bash
       env:
-        SANITIZER: ${{ runner.temp }}/sanitizer.ts
+        SANITIZER: ${{ runner.temp }}/../_actions/anthropics/claude-code-action/v1/src/github/utils/sanitizer.ts
       run: |
         if ! node --experimental-strip-types -e '' 2>/dev/null; then
           echo "::error::The sanitizer needs Node.js 22.6 or later; found $(node --version 2>/dev/null || echo none)."
           exit 1
         fi
-        # renovate: depName=anthropics/claude-code-action datasource=github-tags
-        SANITIZER_SHA=1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
-        curl -fsSL -o "$SANITIZER" \
-          "https://raw.githubusercontent.com/anthropics/claude-code-action/$SANITIZER_SHA/src/github/utils/sanitizer.ts"
+        if [[ ! -f "$SANITIZER" ]]; then
+          echo "::error::No claude-code-action sanitizer at $SANITIZER."
+          exit 1
+        fi
+        echo "path=$SANITIZER" >> "$GITHUB_OUTPUT"
 
     # Fixed queries here can't be steered by injected review text.
     - name: Fetch review history
@@ -155,7 +165,7 @@ runs:
         GH_TOKEN: ${{ github.token }}
         PR_NUMBER: ${{ github.event.pull_request.number }}
         REPOSITORY: ${{ github.repository }}
-        SANITIZER: ${{ runner.temp }}/sanitizer.ts
+        SANITIZER: ${{ steps.sanitizer.outputs.path }}
         OUT: ${{ runner.temp }}/review-history.json
       run: |
         PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
@@ -216,6 +226,8 @@ runs:
       continue-on-error: true
       # TODO: Would like to pin this, but the Mozilla org allowlist requires "anthropics/claude-code-action@v1"
       uses: anthropics/claude-code-action@v1 # zizmor: ignore[unpinned-uses]
+      env:
+        CLAUDE_CODE_SUBPROCESS_ENV_SCRUB: "1" # Keeps secrets out of Claude's shell commands.
       with:
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
         github_token: ${{ github.token }}
@@ -231,7 +243,7 @@ runs:
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Run each shell command alone, without pipes, && or ;: one unpermitted part denies the whole command. Read files with Read."
+          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Shell access is limited to gh pr diff, gh pr view, gh issue view, gh release list and gh release view, each run alone; git fetch, gh api and writing files are denied. Read files with Read."
           --json-schema '{
             "type": "object", "additionalProperties": false, "required": ["body", "comments"],
             "properties": {
@@ -249,27 +261,24 @@ runs:
           --allowedTools Skill Agent Task ReportFindings
           --allowedTools "Bash(gh pr diff:*)" "Bash(gh pr view:*)" "Bash(gh issue view:*)"
           --allowedTools "Bash(gh release list:*)" "Bash(gh release view:*)"
-          --allowedTools "Read(/${{ runner.temp }}/review-history.json)" "Read(~/.claude/projects/**)"
+          --allowedTools "Read(/${{ runner.temp }}/review-history.json)" "Read(~/.claude/**)"
           ${{ steps.web.outputs.args }}
         prompt: ${{ steps.prompt.outputs.content }}
 
-    # Event is a literal here. Runs after failure so a partial review still posts.
-    - name: Post review
+    # Runs after failure so a partial review still posts.
+    - name: Prepare review
+      id: result
       if: ${{ !cancelled() && steps.claude.outcome != 'skipped' }}
       shell: bash
       env:
-        GH_TOKEN: ${{ github.token }}
-        PR_NUMBER: ${{ github.event.pull_request.number }}
-        REPOSITORY: ${{ github.repository }}
         HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         OUTCOME: ${{ steps.claude.outcome }}
         LOG: ${{ runner.temp }}/claude-execution-output.json
         # Unset unless Claude succeeded with output matching the schema.
         STRUCTURED: ${{ steps.claude.outputs.structured_output }}
         BUDGET: ${{ inputs.budget }}
-        SANITIZER: ${{ runner.temp }}/sanitizer.ts
+        SANITIZER: ${{ steps.sanitizer.outputs.path }}
       run: |
-        PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
         if [[ -n "$STRUCTURED" ]]; then
           STRUCTURED=$(node --experimental-strip-types --no-warnings --input-type=module -e '
             const { redactSecrets } = await import(process.argv[1]);
@@ -310,42 +319,29 @@ runs:
               + (if .start_line then {start_line, start_side: (.start_side // .side // "RIGHT")} else {} end))) as $c
             | (if $fold then [$c[] | "**\(.path):\(if .start_line then "\(.start_line)-" else "" end)\(.line)**\n\n\(.body)"]
                else [] end) as $folded
-            | {commit_id: $sha, event: "COMMENT", comments: (if $fold then [] else $c end),
+            | {commit_id: $sha, comments: (if $fold then [] else $c end),
                body: ([if $r == null or $r.body != "" then $r.body // ""
                        elif ($c | length) == 0 then "_No findings._"
                        elif $fold then ""
                        else "_No whole-change observations._" end] + $folded + [$note]
                  | map(select(. != "")) | join("\n\n"))}'
         }
-        PAYLOAD=$(build false)
-        POSTED=$(jq '.comments | length' <<< "$PAYLOAD")
-        for ID in $(gh api --paginate "$PR/reviews?per_page=100" --jq '.[] | select(.state == "PENDING") | .id'); do
-          gh api --method DELETE "$PR/reviews/$ID" > /dev/null || true
-        done
-        if ! URL=$(gh api --method POST "$PR/reviews" --input - --jq .html_url <<< "$PAYLOAD" 2>&1); then
-          # Typically a 422 for an anchor outside the diff.
-          echo "::warning::GitHub rejected the review (${URL//$'\n'/ }), so its inline comments are posted in the body."
-          POSTED=0
-          URL=$(build true | gh api --method POST "$PR/reviews" --input - --jq .html_url) || {
-            echo "::error::Could not post a review on $PR."
-            exit 1
-          }
-        fi
-        echo "Posted a review with $POSTED inline comment(s): $URL"
         {
           echo "### Claude review"
           echo ""
           echo "- Claude step: \`$OUTCOME\`${SUBTYPE:+ (\`$SUBTYPE\`)}"
-          echo "- Review posted: $URL ($POSTED inline comments)"
           echo "- $TURNS turns, ${SECS}s, \$$COST of \$$BUDGET"
         } >> "$GITHUB_STEP_SUMMARY"
+        # Reported by claude-review/post after posting.
+        ERROR=""
         if jq -ne 'env.STRUCTURED | fromjson? | .diff_unavailable == true' >/dev/null; then
-          echo "::error::The pull request diff was unavailable, so the change was not reviewed."
-          exit 1
-        fi
+          ERROR="The pull request diff was unavailable, so the change was not reviewed."
         # The conclusion output is unset when the action throws.
         # A budget cap is expected.
-        if [[ "$OUTCOME" == "failure" && "$SUBTYPE" != error_max_budget* ]]; then
-          echo "Claude execution failed." >&2
-          exit 1
+        elif [[ "$OUTCOME" == "failure" && "$SUBTYPE" != error_max_budget* ]]; then
+          ERROR="Claude execution failed."
         fi
+        # Folded is the fallback for a review GitHub rejects.
+        REVIEW=$(jq -nc --argjson review "$(build false)" --argjson folded "$(build true)" --arg error "$ERROR" \
+          '{$review, $folded, $error}')
+        echo "review=$REVIEW" >> "$GITHUB_OUTPUT"

@@ -53,9 +53,10 @@ It runs the built-in `code-review` skill, then domain passes for `unsafe`/FFI so
 input, crypto and TLS, protocol attacks, specification conformance, contract misuse and behavioral
 compatibility. Every finding states a concrete failure scenario, inline comments are capped, and
 points a prior review already made, per the pull request's review history, are not re-raised.
-Claude returns its findings as schema-validated structured output, and the action posts them as
-exactly one review per run, so a silent job never reads as a clean one. Claude has no GitHub write
-access and cannot write files.
+Claude returns its findings as schema-validated structured output, and `claude-review/post` posts
+them as exactly one review per run, so a silent job never reads as a clean one. Claude has no GitHub
+write access and cannot write files, and it runs in a job whose token is read-only; only the posting
+job can write.
 
 [claude-code-action](https://github.com/anthropics/claude-code-action/blob/main/docs/security.md)
 restores `.claude/`, `CLAUDE.md` and similar files from the base branch on pull request events.
@@ -66,17 +67,10 @@ restores `.claude/`, `CLAUDE.md` and similar files from the base branch on pull 
 Copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml) into your
 repository, or call it as a
 [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) with
-`secrets: inherit`. To customize, use the composite action directly:
-
-```yaml
-- uses: mozilla/actions/claude-review
-  with:
-    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
-    prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
-```
-
-That means supplying the trigger, job condition, permissions and concurrency group yourself. The
-action skips pull requests from forks, and a superseded run should be cancelled:
+`secrets: inherit`. To customize, use the composite actions directly. That means supplying the
+trigger, job condition, permissions and concurrency group yourself, with the review and the posting
+in separate jobs. The action skips pull requests from forks, and a superseded run should be
+cancelled:
 
 ```yaml
 on:
@@ -92,8 +86,25 @@ jobs:
       github.event.pull_request.user.type != 'Bot'
     permissions:
       contents: read
-      pull-requests: write
+      pull-requests: read
       issues: read
+    outputs:
+      review: ${{ steps.review.outputs.review }}
+    steps:
+      - id: review
+        uses: mozilla/actions/claude-review
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          prompt: "Focus on protocol compliance and unsafe FFI usage." # optional
+  claude-post:
+    needs: claude-review
+    if: ${{ !cancelled() && needs.claude-review.outputs.review != '' }}
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: mozilla/actions/claude-review/post
+        with:
+          review: ${{ needs.claude-review.outputs.review }}
 ```
 
 | Input               | Default      | Description                                        |
@@ -250,7 +261,7 @@ jobs:
 
 ### `claude-review.yml` — Claude Code Review
 
-Wraps the [`claude-review`](#claude-review--claude-code-review) composite action as a
+Wraps the [`claude-review`](#claude-review--claude-code-review) composite actions as a
 self-contained workflow. Handles the `pull_request` trigger, skips fork, draft and bot pull
 requests, and cancels a superseded run on the same pull request.
 Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
