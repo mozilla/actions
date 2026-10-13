@@ -219,6 +219,18 @@ runs:
           ' "$SANITIZER" < "$RUNNER_TEMP/history-raw.json" > "$OUT" || fail "sanitizing"
         echo "Review history: $(jq length "$THREADS") thread(s), $(jq length "$REVIEWS") review(s)."
 
+    # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB below requires bubblewrap.
+    - name: Install bubblewrap
+      if: ${{ steps.prompt.outputs.skip != 'true' }}
+      shell: bash
+      run: |
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq --no-install-recommends bubblewrap
+        # Ubuntu 24.04 restricts the unprivileged user namespaces bubblewrap needs.
+        if [[ -f /proc/sys/kernel/apparmor_restrict_unprivileged_userns ]]; then
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+        fi
+
     - name: Run Claude Code Review
       id: claude
       if: ${{ steps.prompt.outputs.skip != 'true' }}
