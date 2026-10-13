@@ -23,11 +23,27 @@ jobs:
       !github.event.pull_request.draft &&
       github.event.pull_request.user.type != 'Bot'
     runs-on: ubuntu-24.04
+    # Read-only, so a token Claude could read is worth little.
     permissions:
       contents: read
-      pull-requests: write # Required to post the review.
+      pull-requests: read # Required for gh pr diff and the review history.
       issues: read # Required for gh issue view.
+    outputs:
+      review: ${{ steps.review.outputs.review }}
     steps:
-      - uses: $/claude-review
+      - id: review
+        uses: $/claude-review
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+
+  claude-post:
+    name: Post Claude Code Review
+    needs: claude-review
+    if: ${{ !cancelled() && needs.claude-review.outputs.review != '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      pull-requests: write # Required to post the review.
+    steps:
+      - uses: $/claude-review/post
+        with:
+          review: ${{ needs.claude-review.outputs.review }}

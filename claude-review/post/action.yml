@@ -1,0 +1,49 @@
+name: Post Claude Code Review
+description: Posts the review from claude-review, in a job with pull-requests write.
+
+inputs:
+  review:
+    description: The review output of claude-review.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    # Event is a literal here.
+    - name: Post review
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        REPOSITORY: ${{ github.repository }}
+        HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        REVIEW: ${{ inputs.review }}
+      run: |
+        PR="repos/$REPOSITORY/pulls/$PR_NUMBER"
+        post() {
+          jq --arg key "$1" --arg sha "$HEAD_SHA" '.[$key] + {commit_id: $sha, event: "COMMENT"}' <<< "$REVIEW" |
+            gh api --method POST "$PR/reviews" --input - --jq .html_url
+        }
+        POSTED=$(jq '.review.comments | length' <<< "$REVIEW") || {
+          echo "::error::Not a claude-review output."
+          exit 1
+        }
+        for ID in $(gh api --paginate "$PR/reviews?per_page=100" --jq '.[] | select(.state == "PENDING") | .id'); do
+          gh api --method DELETE "$PR/reviews/$ID" > /dev/null || true
+        done
+        if ! URL=$(post review 2>&1); then
+          # Typically a 422 for an anchor outside the diff.
+          echo "::warning::GitHub rejected the review (${URL//$'\n'/ }), so its inline comments are posted in the body."
+          POSTED=0
+          URL=$(post folded) || {
+            echo "::error::Could not post a review on $PR."
+            exit 1
+          }
+        fi
+        echo "Posted a review with $POSTED inline comment(s): $URL"
+        echo "- Review posted: $URL ($POSTED inline comments)" >> "$GITHUB_STEP_SUMMARY"
+        ERROR=$(jq -r '.error' <<< "$REVIEW")
+        if [[ -n "$ERROR" ]]; then
+          echo "::error::$ERROR"
+          exit 1
+        fi
