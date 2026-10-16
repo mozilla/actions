@@ -137,6 +137,7 @@ runs:
       uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ github.event.pull_request.head.sha }}
+        fetch-depth: 0
         persist-credentials: false
 
     # The runner downloads the claude-code-action used below before the first step.
@@ -243,6 +244,8 @@ runs:
       with:
         anthropic_api_key: ${{ inputs.anthropic_api_key }}
         github_token: ${{ github.token }}
+        # Readable by Read, Glob, Grep and read-only shell commands; unlike --add-dir, loads no skills.
+        settings: '{"permissions": {"additionalDirectories": ["${{ runner.temp }}/../_actions", "~/.cargo/registry/src"]}}'
         # See https://github.com/anthropics/claude-code-action/blob/main/docs/usage.md
         # or https://docs.anthropic.com/en/docs/claude-code/sdk#command-line for available options.
         # Agent/Task: the skill fans out. ReportFindings: it reports through that.
@@ -255,7 +258,7 @@ runs:
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Shell access is limited to gh pr diff, gh pr view, gh issue view, gh release list and gh release view, each run alone; git fetch, gh api and writing files are denied. Read files with Read."
+          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Downloaded actions are in ${{ runner.temp }}/../_actions and crate sources, if any, in ~/.cargo/registry/src. Shell access is limited to read-only commands such as git log, git show and ls in the checkout and those directories, plus gh pr diff, gh pr view, gh issue view, gh release list and gh release view, each run alone; git fetch, gh api and writing files are denied. Read files with Read."
           --json-schema '{
             "type": "object", "additionalProperties": false, "required": ["body", "comments"],
             "properties": {

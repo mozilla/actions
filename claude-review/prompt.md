@@ -45,9 +45,9 @@ Do not report that a previous issue is now resolved. The resolved mark is the re
 ## 3. Correctness pass
 
 Invoke the `code-review` skill with the pull request number named above and `high` as its
-arguments. The checkout is a shallow single commit with no base ref, so `git diff` cannot work.
-Get the diff with `gh pr diff` and the pull request number, and read all of it. Tell any subagent
-you start to do the same.
+arguments. The checkout has all branches and tags, so `git log` and `git show` work, but get the
+diff with `gh pr diff` and the pull request number, and read all of it. Tell any subagent you start
+to do the same.
 
 If `gh pr diff` fails, review nothing. Return the review with `"diff_unavailable": true`, no
 comments, and a body quoting the error, and stop.
