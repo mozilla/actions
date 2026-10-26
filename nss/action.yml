@@ -231,7 +231,7 @@ runs:
         } >> "$GITHUB_PATH"
         mkdir -p "$HOME/bin"
         # renovate: depName=firefox datasource=custom.firefox
-        curl --proto '=https' --tlsv1.2 -o "$HOME/bin/nsinstall" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_158_0_RELEASE/config/nsinstall.py
+        curl --proto '=https' --tlsv1.2 -o "$HOME/bin/nsinstall" -sSf https://hg-edge.mozilla.org/releases/mozilla-release/raw-file/FIREFOX_158_0_1_RELEASE/config/nsinstall.py
         echo "f88df5591ee50d6e86625efd6e5f9c7b0dd4cba61e27ab533b1990115e100caf  $HOME/bin/nsinstall" | sha256sum -c -
         sed -i '1i #! /usr/bin/env python3' "$HOME/bin/nsinstall"
         chmod +x "$HOME/bin/nsinstall"
