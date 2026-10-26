@@ -216,7 +216,7 @@ runs:
       run: |
         brew install ninja
         # renovate: depName=gyp-next datasource=pypi
-        echo "gyp-next==0.22.3" > req.txt
+        echo "gyp-next==0.22.4" > req.txt
         python3 -m pip install --break-system-packages -r req.txt
 
     - name: Install build dependencies (Windows)
@@ -237,7 +237,7 @@ runs:
         chmod +x "$HOME/bin/nsinstall"
         # gyp-next>=0.22.0 added Windows ARM64 target support (nodejs/gyp-next#331).
         # renovate: depName=gyp-next datasource=pypi
-        echo "gyp-next==0.22.3" > req.txt
+        echo "gyp-next==0.22.4" > req.txt
         # renovate: depName=mozfile datasource=pypi
         echo "mozfile==3.0.0" >> req.txt  # required by nsinstall.py
         python3 -m pip install -r req.txt
