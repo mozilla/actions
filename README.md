@@ -266,8 +266,8 @@ jobs:
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite actions as a
 self-contained workflow. Handles the `pull_request` trigger, skips fork, draft and bot pull
 requests, and cancels a superseded run on the same pull request.
-Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
-To customize model, budget, or prompt, use the composite action directly.
+Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`
+and an optional `prompt` input. To customize model or budget, use the composite action directly.
 
 ### `deny.yml` — cargo deny
 
