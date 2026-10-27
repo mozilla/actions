@@ -67,10 +67,10 @@ restores `.claude/`, `CLAUDE.md` and similar files from the base branch on pull 
 Copy [`.github/workflows/claude-review.yml`](.github/workflows/claude-review.yml) into your
 repository, or call it as a
 [reusable workflow](https://docs.github.com/en/actions/sharing-automations/reusing-workflows) with
-`secrets: inherit`. To customize, use the composite actions directly. That means supplying the
-trigger, job condition, permissions and concurrency group yourself, with the review and the posting
-in separate jobs. The action skips pull requests from forks, and a superseded run should be
-cancelled:
+`secrets: inherit` and an optional `prompt` input. To customize further, use the composite actions
+directly. That means supplying the trigger, job condition, permissions and concurrency group
+yourself, with the review and the posting in separate jobs. The action skips pull requests from
+forks, and a superseded run should be cancelled:
 
 ```yaml
 on:
@@ -266,8 +266,8 @@ jobs:
 Wraps the [`claude-review`](#claude-review--claude-code-review) composite actions as a
 self-contained workflow. Handles the `pull_request` trigger, skips fork, draft and bot pull
 requests, and cancels a superseded run on the same pull request.
-Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`.
-To customize model, budget, or prompt, use the composite action directly.
+Can be copied directly into a repository or called as a reusable workflow with `secrets: inherit`
+and an optional `prompt` input. To customize model or budget, use the composite action directly.
 
 ### `deny.yml` — cargo deny
 

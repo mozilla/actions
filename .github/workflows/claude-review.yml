@@ -3,6 +3,11 @@ on:
   pull_request:
     types: [opened, synchronize, ready_for_review, reopened]
   workflow_call:
+    inputs:
+      prompt:
+        description: Additional project-specific review instructions.
+        default: ""
+        type: string
     secrets:
       ANTHROPIC_API_KEY:
         description: Anthropic API key.
@@ -35,6 +40,7 @@ jobs:
         uses: $/claude-review
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }} # zizmor: ignore[secrets-outside-env]
+          prompt: ${{ inputs.prompt }}
 
   claude-post:
     name: Post Claude Code Review
