@@ -178,11 +178,24 @@ runs:
           jq -n --arg reason "$1" '{unavailable: $reason}' > "$OUT"
           exit 0
         }
-        EXPECTED=$(gh api "$PR" --jq .review_comments) || fail "pull request"
-        gh api --paginate --jq '.[]' "$PR/reviews?per_page=100" | jq -s '.' > "$REVIEWS" || fail "reviews"
+        # The API has transiently returned a body that is not JSON; log it and retry once.
+        api() {
+          local out try
+          for try in 1 2; do
+            if out=$(gh api "$@") && jq -e . <<< "$out" > /dev/null 2>&1; then
+              printf '%s' "$out"
+              return 0
+            fi
+            echo "::warning::gh api try $try failed; reply starts: $(head -c 300 <<< "$out" | jq -Rs .)" >&2
+            [[ "$try" == 1 ]] && sleep 5
+          done
+          return 1
+        }
+        EXPECTED=$(api "$PR" | jq .review_comments) || fail "pull request"
+        api --paginate "$PR/reviews?per_page=100" | jq -s 'add // []' > "$REVIEWS" || fail "reviews"
         # Resolution state is GraphQL-only.
-        gh api graphql --paginate -F owner="${REPOSITORY%/*}" -F repo="${REPOSITORY#*/}" -F pr="$PR_NUMBER" \
-          --jq '.data.repository.pullRequest.reviewThreads.nodes[]' -f query='
+        api graphql --paginate -F owner="${REPOSITORY%/*}" -F repo="${REPOSITORY#*/}" -F pr="$PR_NUMBER" \
+          -f query='
           query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
             repository(owner: $owner, name: $repo) {
               pullRequest(number: $pr) {
@@ -199,7 +212,7 @@ runs:
                 }
               }
             }
-          }' | jq -s '.' > "$THREADS" || fail "review threads"
+          }' | jq -s '[.[].data.repository.pullRequest.reviewThreads.nodes[]]' > "$THREADS" || fail "review threads"
         # Short pages, or threads past the nested page, would otherwise pass as complete.
         GOT=$(jq '[.[].comments.nodes | length] | add // 0' "$THREADS")
         if [[ "$GOT" -lt "$EXPECTED" ]]; then
@@ -220,6 +233,15 @@ runs:
           process.stdout.write(JSON.stringify(h, null, 1));
           ' "$SANITIZER" < "$RUNNER_TEMP/history-raw.json" > "$OUT" || fail "sanitizing"
         echo "Review history: $(jq length "$THREADS") thread(s), $(jq length "$REVIEWS") review(s)."
+
+    # The runner image empties ~/.cargo/registry; Claude reads crate sources there.
+    - name: Fetch crate sources
+      if: ${{ steps.prompt.outputs.skip != 'true' }}
+      shell: bash
+      run: |
+        if [[ -f Cargo.lock ]]; then
+          cargo fetch --locked || echo "::warning::Could not fetch crate sources; Claude will review without them."
+        fi
 
     # CLAUDE_CODE_SUBPROCESS_ENV_SCRUB below requires the sandbox's bubblewrap and socat.
     - name: Install sandbox dependencies
@@ -257,7 +279,7 @@ runs:
           ${{ inputs.model && format('--model {0}', inputs.model) || '' }}
           ${{ inputs.fallback_model && format('--fallback-model {0}', inputs.fallback_model) || '' }}
           --max-budget-usd ${{ inputs.budget }}
-          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Downloaded actions are in ${{ steps.sanitizer.outputs.actions }} and crate sources, if any, in ~/.cargo/registry/src. Shell access is limited to read-only commands such as git log, git show and ls in the checkout and those directories, plus gh pr diff, gh pr view, gh issue view, gh release list and gh release view, each run alone; git fetch, gh api and writing files are denied. Read files with Read."
+          --append-system-prompt "Get the pull request's diff with gh pr diff and the pull request number. Output over about 30,000 characters is saved to a file; read all of it, finishing with offset and limit. The head commit is checked out at ${{ github.workspace }}; read surrounding code there with Read, Glob and Grep. Downloaded actions are in ${{ steps.sanitizer.outputs.actions }} and crate sources, if any, in ~/.cargo/registry/src. Shell access is limited to read-only commands such as git log, git show and ls in the checkout and those directories, plus gh pr diff, gh pr view, gh pr checks, gh issue view, gh release list and gh release view, each run alone; git fetch, gh api and writing files are denied. Read files with Read. There is no build: cargo, rustc and running tests are denied. CI is usually still running; pending checks prove nothing either way; don't wait. Run git from the checkout without -C or cd, give option values as separate arguments (git log -S text), and search with Grep rather than a grep pattern containing $."
           --json-schema '{
             "type": "object", "additionalProperties": false, "required": ["body", "comments"],
             "properties": {
@@ -273,7 +295,7 @@ runs:
                   "start_side": {"enum": ["LEFT", "RIGHT"]},
                   "body": {"type": "string"}}}}}}'
           --allowedTools Skill Agent Task ReportFindings
-          --allowedTools "Bash(gh pr diff:*)" "Bash(gh pr view:*)" "Bash(gh issue view:*)"
+          --allowedTools "Bash(gh pr diff:*)" "Bash(gh pr view:*)" "Bash(gh pr checks:*)" "Bash(gh issue view:*)"
           --allowedTools "Bash(gh release list:*)" "Bash(gh release view:*)"
           --allowedTools "Read(/${{ runner.temp }}/review-history.json)" "Read(~/.claude/**)"
           --allowedTools "Read(/${{ steps.sanitizer.outputs.actions }}/**)" "Read(~/.cargo/registry/src/**)"
