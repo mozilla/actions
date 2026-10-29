@@ -178,11 +178,24 @@ runs:
           jq -n --arg reason "$1" '{unavailable: $reason}' > "$OUT"
           exit 0
         }
-        EXPECTED=$(gh api "$PR" --jq .review_comments) || fail "pull request"
-        gh api --paginate --jq '.[]' "$PR/reviews?per_page=100" | jq -s '.' > "$REVIEWS" || fail "reviews"
+        # The API has transiently returned a body that is not JSON; log it and retry once.
+        api() {
+          local out try
+          for try in 1 2; do
+            if out=$(gh api "$@") && jq -e . <<< "$out" > /dev/null 2>&1; then
+              printf '%s' "$out"
+              return 0
+            fi
+            echo "::warning::gh api try $try failed; reply starts: $(head -c 300 <<< "$out" | jq -Rs .)" >&2
+            [[ "$try" == 1 ]] && sleep 5
+          done
+          return 1
+        }
+        EXPECTED=$(api "$PR" | jq .review_comments) || fail "pull request"
+        api --paginate "$PR/reviews?per_page=100" | jq -s 'add // []' > "$REVIEWS" || fail "reviews"
         # Resolution state is GraphQL-only.
-        gh api graphql --paginate -F owner="${REPOSITORY%/*}" -F repo="${REPOSITORY#*/}" -F pr="$PR_NUMBER" \
-          --jq '.data.repository.pullRequest.reviewThreads.nodes[]' -f query='
+        api graphql --paginate -F owner="${REPOSITORY%/*}" -F repo="${REPOSITORY#*/}" -F pr="$PR_NUMBER" \
+          -f query='
           query($owner: String!, $repo: String!, $pr: Int!, $endCursor: String) {
             repository(owner: $owner, name: $repo) {
               pullRequest(number: $pr) {
@@ -199,7 +212,7 @@ runs:
                 }
               }
             }
-          }' | jq -s '.' > "$THREADS" || fail "review threads"
+          }' | jq -s '[.[].data.repository.pullRequest.reviewThreads.nodes[]]' > "$THREADS" || fail "review threads"
         # Short pages, or threads past the nested page, would otherwise pass as complete.
         GOT=$(jq '[.[].comments.nodes | length] | add // 0' "$THREADS")
         if [[ "$GOT" -lt "$EXPECTED" ]]; then
