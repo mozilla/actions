@@ -156,8 +156,8 @@ runs:
         VERSION: ${{ inputs.version }}
       run: |
         # renovate: depName=cargo-bins/cargo-binstall datasource=github-tags
-        BINSTALL_VERSION=1.26.1
-        BINSTALL_SHA=81df5c23b0dc775b009efdfc9895c5965b7a4e40
+        BINSTALL_VERSION=1.26.2
+        BINSTALL_SHA=851112458b5f28a29e5bc14a690c3f283d9dcc6f
         curl -L --proto '=https' --tlsv1.2 -sSf \
           "https://raw.githubusercontent.com/cargo-bins/cargo-binstall/${BINSTALL_SHA}/install-from-binstall-release.sh" \
           | BINSTALL_VERSION="$BINSTALL_VERSION" bash
