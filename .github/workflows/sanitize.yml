@@ -22,10 +22,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15] # No Windows support for sanitizers.
+        os: [ubuntu-26.04, macos-26] # No Windows support for sanitizers.
         sanitizer: [address, thread, leak] # TODO: memory
         exclude:
-          - os: macos-15
+          - os: macos-26
             sanitizer: leak
     runs-on: ${{ matrix.os }}
     steps:
@@ -49,10 +49,10 @@ jobs:
         run: |
           export RUSTFLAGS="-Z sanitizer=$SANITIZER $RUSTFLAGS"
           export RUSTDOCFLAGS="-Z sanitizer=$SANITIZER -Cunsafe-allow-abi-mismatch=sanitizer"
-          if [ "$OS" = "ubuntu-24.04" ]; then
+          if [ "$OS" = "ubuntu-26.04" ]; then
             sudo apt-get install -y --no-install-recommends llvm
             TARGET="x86_64-unknown-linux-gnu"
-          elif [ "$OS" = "macos-15" ]; then
+          elif [ "$OS" = "macos-26" ]; then
             TARGET="aarch64-apple-darwin"
             # Suppress leaks in macOS system libraries unrelated to the code under test.
             {

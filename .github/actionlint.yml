@@ -1,3 +1,9 @@
+self-hosted-runner:
+  labels:
+    # GitHub-hosted, but unknown to actionlint 1.7.12.
+    - ubuntu-26.04
+    - ubuntu-26.04-arm
+
 # actionlint 1.7.12 does not know the `$/` syntax, which references an action in
 # this repository at the running commit. Matching on the `$/` prefix keeps a
 # genuinely missing `@ref` elsewhere reported.
