@@ -387,4 +387,4 @@ jobs:
         run: |
           echo "NSS_DIR=$NSS_DIR"
           ls dist/Release/lib/*.a
-          file dist/Release/lib/*.so | tee /dev/stderr | grep -q 'Intel 80386'
+          file dist/Release/lib/*.so | tee /dev/stderr | grep -qE 'Intel (80386|i386)'
