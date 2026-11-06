@@ -10,7 +10,7 @@ jobs:
   machete:
     name: Check for unused dependencies
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         shell: bash

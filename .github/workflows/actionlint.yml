@@ -10,7 +10,7 @@ jobs:
   actionlint:
     name: actionlint
     timeout-minutes: 5
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         shell: bash
@@ -50,7 +50,7 @@ jobs:
   prettier:
     name: Prettier
     timeout-minutes: 5
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         shell: bash
@@ -67,7 +67,7 @@ jobs:
   zizmor:
     name: zizmor
     timeout-minutes: 5
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     permissions:
       security-events: write # Required to upload SARIF results to GitHub
     steps:

@@ -10,7 +10,7 @@ jobs:
   rdme:
     name: README in sync with crate docs
     timeout-minutes: 15
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     defaults:
       run:
         shell: bash
