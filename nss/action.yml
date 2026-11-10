@@ -12,8 +12,11 @@ inputs:
     description: "SHA256 of the 'nss-<minimum-version>-with-nspr-<nspr-version>.tar.gz' release tarball, unless 'deps-only'."
     default: ""
   target:
-    description: "Target for cross-compilation"
+    description: "Rust target triple to cross-compile for: i686-*-linux-gnu, or an Android target, which needs minimum-version 3.134 or later"
     default: ""
+  android-api:
+    description: "Android API level to build for (Android targets only)"
+    default: "21"
   deps-only:
     description: "Install the NSS build toolchain but acquire no NSS, for callers that build their own checkout."
     default: "false"
@@ -23,17 +26,14 @@ inputs:
   sccache:
     description: Whether to enable sccache for NSS compilation caching
     default: "false"
-  token:
-    description: "A GitHub PAT; used to avoid rate limits when fetching build scripts"
-    required: false
   java-version:
     description: "Java version to install for Android builds"
     default: "21"
 
 outputs:
   ndk-version:
-    description: "Android NDK version derived from application-services (Android builds only)"
-    value: ${{ steps.android-ndk.outputs.ndk-version }}
+    description: "Version of the Android NDK that NSS was built with (Android builds only)"
+    value: ${{ steps.validate.outputs.ndk-version }}
 
 runs:
   using: composite
@@ -41,8 +41,10 @@ runs:
     # Turn the conditional requirements into loud failures here, rather than an
     # empty version 404ing on the release URL further down.
     - name: Validate inputs
+      id: validate
       shell: bash
       env:
+        ANDROID_API: ${{ inputs.android-api }}
         DEPS_ONLY: ${{ inputs.deps-only }}
         MIN_VERSION: ${{ inputs.minimum-version }}
         SHA256: ${{ inputs.sha256 }}
@@ -52,16 +54,34 @@ runs:
           [ -n "$MIN_VERSION" ] && [ -n "$SHA256" ] ||
             { echo "::error::minimum-version and sha256 are required unless deps-only is true"; exit 1; }
         fi
-        # Build does not run in deps-only mode, so vet the target here instead.
+        # Build does not run in deps-only mode, so vet the target here instead,
+        # and work out the build.sh arguments for it while at it.
+        CROSS_FLAGS=""
         case "$TARGET_PLATFORM" in
-          *-android*) # Android does its own 32-bit handling, but not via build.sh.
-            [ "$DEPS_ONLY" != "true" ] ||
-              { echo "::error::deps-only does not support Android targets, which do not go through build.sh"; exit 1; } ;;
-          i686-*-linux-gnu) ;;
+          *-android*)
+            case "$TARGET_PLATFORM" in
+              aarch64-*) ARCH=arm64 ;;
+              arm-* | armv7-* | thumbv7neon-*) ARCH=arm ;;
+              x86_64-*) ARCH=x64 ;;
+              i686-*) ARCH=ia32 ;;
+              *) echo "::error::Unsupported Android target: $TARGET_PLATFORM"; exit 1 ;;
+            esac
+            [[ "$ANDROID_API" =~ ^[0-9]+$ ]] ||
+              { echo "::error::android-api must be a number, got '$ANDROID_API'"; exit 1; }
+            # Firefox builds with this NDK too; keep in step with NDK_VERSION in
+            # its python/mozboot/mozboot/android.py, which names it by release
+            # (r30), whereas sdkmanager wants the full version.
+            NDK_VERSION="30.0.16248370"
+            echo "ndk-version=$NDK_VERSION" >> "$GITHUB_OUTPUT"
+            # The NDK and API level change the build without changing the target.
+            echo "cache-suffix=-ndk$NDK_VERSION-api$ANDROID_API" >> "$GITHUB_OUTPUT"
+            CROSS_FLAGS=" --target-os=android --android-api=$ANDROID_API -t $ARCH" ;;
+          i686-*-linux-gnu) CROSS_FLAGS=" -t ia32" ;;
           i?86-*)
             echo "::error::Unsupported 32-bit x86 target: $TARGET_PLATFORM (only i686-*-linux-gnu is handled)"
             exit 1 ;;
         esac
+        echo "cross-flags=$CROSS_FLAGS" >> "$GITHUB_OUTPUT"
 
     - name: Install system NSS (Linux)
       shell: bash
@@ -101,6 +121,7 @@ runs:
       env:
         NSS_VERSION: ${{ inputs.minimum-version }}
         NSS_SHA256: ${{ inputs.sha256 }}
+        TARGET_PLATFORM: ${{ inputs.target }}
       run: |
         NSS_TAG="${NSS_VERSION//./_}"
         RELEASE_DIR="https://ftp.mozilla.org/pub/security/nss/releases/NSS_${NSS_TAG}_RTM/src"
@@ -134,6 +155,13 @@ runs:
         [ "$actual" = "$NSS_SHA256" ] || { echo "Checksum mismatch!"; exit 1; }
         tar xzf nss.tar.gz --strip-components=1
         rm nss.tar.gz
+        case "$TARGET_PLATFORM" in
+          *-android*)
+            grep -q -e '--target-os=' nss/build.sh || {
+              echo "::error::NSS $NSS_VERSION cannot be built for $TARGET_PLATFORM; that needs build.sh --target-os, from NSS 3.134"
+              exit 1
+            } ;;
+        esac
         echo "version=$NSS_VERSION" >> "$GITHUB_OUTPUT"
         echo "nspr-version=$NSPR_VERSION" >> "$GITHUB_OUTPUT"
 
@@ -155,7 +183,7 @@ runs:
       uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist
-        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}
+        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}${{ steps.validate.outputs.cache-suffix }}
 
     - name: Check if the build toolchain is needed
       id: check_build
@@ -275,15 +303,11 @@ runs:
       env:
         NSS_DIR: ${{ github.workspace }}/nss
         RUNNER_OS: ${{ runner.os }}
-        TARGET_PLATFORM: ${{ inputs.target }}
+        CROSS_FLAGS: ${{ steps.validate.outputs.cross-flags }}
         WORKSPACE: ${{ github.workspace }}
       run:
         | # zizmor: ignore[github-env] We need to write to GITHUB_PATH on Windows.
         NSS_OUT="$WORKSPACE/dist/Release"
-        # build.sh defaults target_arch to the host, so set it for the one
-        # cross-arch target supported here.
-        IA32=""
-        [[ $TARGET_PLATFORM == i686-*-linux-gnu ]] && IA32=" -t ia32"
         # An optimized build still wants debug symbols and frame pointers, for
         # accurate CPU profiling. Not named CFLAGS, so it doesn't reach the rest
         # of the job; Build and deps-only callers export it around build.sh.
@@ -291,7 +315,8 @@ runs:
         [ "$RUNNER_OS" != "Windows" ] && CFLAGS_FOR_NSS="-ggdb3 -fno-omit-frame-pointer"
         # The Build step below and any deps-only caller driving build.sh
         # themselves must agree on how NSS gets built.
-        FLAGS="-g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static$IA32"
+        # CROSS_FLAGS selects the target; build.sh would otherwise build for the host.
+        FLAGS="-g -Ddisable_tests=1 -Ddisable_dbm=1 -Ddisable_libpkix=1 -Ddisable_ckbi=1 -Ddisable_fips=1 --opt --static$CROSS_FLAGS"
         {
           echo "LD_LIBRARY_PATH=$NSS_OUT/lib"
           echo "DYLD_FALLBACK_LIBRARY_PATH=$NSS_OUT/lib"
@@ -325,24 +350,22 @@ runs:
         packages: platform-tools
 
     - name: Set up Android NDK (Android)
-      id: android-ndk
       if: ${{ contains(inputs.target, '-android') }}
       shell: bash
-      run: |
-        # renovate: depName=mozilla/application-services datasource=github-releases versioning=loose
-        APPSERVICES_VERSION="v161.0"
-        NDK_VERSION=$(curl -sSf \
-          "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$APPSERVICES_VERSION/settings.gradle" \
-          | grep ndkVersion | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1) \
-          || true
-        test -n "$NDK_VERSION" || { echo "::error::Failed to derive ndkVersion from application-services $APPSERVICES_VERSION settings.gradle"; exit 1; }
-        echo "Installing Android NDK $NDK_VERSION (from application-services $APPSERVICES_VERSION)"
+      env:
+        NDK_VERSION: ${{ steps.validate.outputs.ndk-version }}
+      run: | # zizmor: ignore[github-env] The NDK has to reach build.sh and the caller's Rust build.
         sdkmanager --install "ndk;$NDK_VERSION"
+        NDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/ndk/$NDK_VERSION"
+        [ -d "$NDK" ] || { echo "::error::NDK $NDK_VERSION not found at $NDK"; exit 1; }
+        # The runner image points these at its own default NDK. build.sh reads
+        # ANDROID_NDK_ROOT and cargo-ndk reads ANDROID_NDK_HOME first, so set
+        # both, for NSS and the caller's Rust code to build with the same NDK.
         {
           echo "NDK_VERSION=$NDK_VERSION"
-          echo "APPSERVICES_VERSION=$APPSERVICES_VERSION"
+          echo "ANDROID_NDK_ROOT=$NDK"
+          echo "ANDROID_NDK_HOME=$NDK"
         } >> "$GITHUB_ENV"
-        echo "ndk-version=$NDK_VERSION" >> "$GITHUB_OUTPUT"
 
     - name: Build
       shell: bash
@@ -353,56 +376,20 @@ runs:
         TARGET_PLATFORM: ${{ inputs.target }}
       run: |
         [ -n "$NSS_BUILD_CFLAGS" ] && export CFLAGS="$NSS_BUILD_CFLAGS"
-        if [[ $TARGET_PLATFORM == *-android* ]]; then
-          # Build scripts come from the same application-services release as the NDK; version
-          # is set and Renovate-tracked in the "Set up Android NDK" step above.
-          # TODO: This version must also be updated when NSS versions change,
-          # as the build script references library names that may change across NSS releases.
-          for file in build-nss-android.sh build-android-common.sh; do
-            curl -o "$file" -sSf \
-              "https://raw.githubusercontent.com/mozilla/application-services/refs/tags/$APPSERVICES_VERSION/libs/$file"
-            chmod +x "$file"
-          done
-          export ANDROID_NDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/ndk/$NDK_VERSION"
-          ANDROID_NDK_VERSION=$(basename "$ANDROID_NDK" | cut -d. -f1)
-          # See https://github.com/mozilla/application-services/blob/46cacda811da094653dc8e93158956f4cd57e87a/libs/build-all.sh#L89-L102
-          # It figures that NSPR would require monkey-patching to build on Android.
-          sed -i'' 's/if test -z "$android_ndk" ; then/$as_echo "#define ANDROID 1" >>confdefs.h\n    ;;\nunreachable)\n    if test -z "$android_ndk" ; then/g' nspr/configure
-          # build-android-common.sh points CC at the NDK clang, and NSPR's config.guess
-          # probes the build system with $CC, making it report *-linux-android. For the
-          # x86_64 target that matches the runner's own arch, so target == host and NSPR
-          # skips cross-compile setup, then fails trying to run the cross-built test binary.
-          export CC_FOR_BUILD=cc
-          ./build-nss-android.sh "$(pwd)" "/tmp/dist" "$ANDROID_NDK/toolchains/llvm/prebuilt/linux-x86_64" "$TARGET_PLATFORM" "$ANDROID_NDK_VERSION"
-          # Manually move the temporary build directory to the final location.
-          find /tmp/tmp.* > tmp
-          CERTUTIL="$(grep certutil tmp)"
-          TARGET_DIR="$(dirname $(dirname $CERTUTIL))"
-          mkdir -p "dist/Release"
-          cp -vaL "$TARGET_DIR"/* "dist/Release/"
-          NSPR_H="$(grep nspr.h tmp)"
-          INCLUDE_DIR="$(dirname $NSPR_H)"
-          mkdir -p "dist/Release/include/nspr"
-          cp -vaL "$INCLUDE_DIR"/* "dist/Release/include/nspr"
-          CHACHA="$(grep chacha20poly1305.h tmp)"
-          PRIVATE_DIR="$(dirname $(dirname $CHACHA))"
-          mkdir -p "dist/private"
-          cp -vaL "$PRIVATE_DIR"/* "dist/private/"
-          UTILRENAME="$(grep utilrename.h tmp)"
-          PUBLIC_DIR="$(dirname $(dirname $(dirname $UTILRENAME)))"
-          mkdir -p "dist/public"
-          cp -vaL "$PUBLIC_DIR"/* "dist/"
-          LIBNSPR4="$(grep lib/libnspr4.a tmp)"
-          LIB_DIR="$(dirname $LIBNSPR4)"
-          mkdir -p "dist/Release/lib"
-          cp -vaL "$LIB_DIR"/* "dist/Release/lib"
-        else
-          # For i686-*-linux-gnu, gcc-multilib provides the 32-bit toolchain and
-          # headers, and NSS_BUILD_FLAGS already carries -t ia32.
-          [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
-          # shellcheck disable=SC2086
-          $NSS_DIR/build.sh $NSS_BUILD_FLAGS
-        fi
+        case "$TARGET_PLATFORM" in
+          *-android*)
+            # Until an NSS release bundles NSPR 4.41, which builds with a current
+            # NDK, skip the legacy toolchain setup in NSPR's configure the way
+            # 4.41 does. This finds nothing to replace in NSPR 4.41 or later.
+            sed -i'' 's/if test -z "$android_ndk" ; then/$as_echo "#define ANDROID 1" >>confdefs.h\n    ;;\nunreachable)\n    if test -z "$android_ndk" ; then/g' nspr/configure ;;
+          *)
+            # build.sh --target-os=android picks the compiler itself, so only
+            # these builds can use sccache. For i686-*-linux-gnu,
+            # gcc-multilib provides the 32-bit toolchain and headers.
+            [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX" ;;
+        esac
+        # shellcheck disable=SC2086
+        $NSS_DIR/build.sh $NSS_BUILD_FLAGS
 
     - name: Save NSS cache
       # Keep in sync with the same predicate in ../rust/action.yml.
@@ -410,4 +397,4 @@ runs:
       uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
       with:
         path: dist
-        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}
+        key: nss-${{ inputs.target || runner.os }}${{ steps.ubuntu_release.outputs.codename }}-${{ runner.arch }}-${{ steps.nss.outputs.version }}-${{ steps.nss.outputs.nspr-version }}${{ steps.validate.outputs.cache-suffix }}
