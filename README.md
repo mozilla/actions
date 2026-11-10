@@ -171,13 +171,21 @@ Sets environment variables (when not using system NSS): `NSS_DIR`, `NSS_PREBUILT
   with:
     minimum-version: "3.100" # Minimum required NSS version
     sha256: "..." # SHA256 of the 'nss-3.100-with-nspr-<version>.tar.gz' release tarball
-    target: "" # Cross-compilation target (e.g. aarch64-linux-android)
+    target: "" # Rust target to cross-compile for (e.g. aarch64-linux-android)
+    android-api: "21" # Android API level to build for (Android targets only; default: 21)
     deps-only: false # Install the build toolchain only, acquiring no NSS (default: false)
     sccache: false # Whether to enable sccache for NSS compilation (default: false)
-    token: ${{ github.token }} # GitHub token to avoid API rate limits (needed for Android builds)
 ```
 
 Building NSS on Windows ARM64 requires `minimum-version` 3.130 or later.
+
+`target` can be `i686-*-linux-gnu` or an Android target (`aarch64-linux-android`,
+`armv7-linux-androideabi`, `x86_64-linux-android` or `i686-linux-android`). Android
+builds use NSS's own `build.sh --target-os=android`, so they need `minimum-version`
+3.134 or later. They run on Linux, with Android NDK r30, which the action installs and
+points `ANDROID_NDK_ROOT` and `ANDROID_NDK_HOME` at, so that a Rust build later in the
+job uses the same NDK. Its version is in the `NDK_VERSION` environment variable and the
+`ndk-version` output.
 
 `deps-only: true` installs the per-platform NSS build toolchain (gyp everywhere, ninja
 on Linux and macOS, and nsinstall plus the MSVC and msys2 setup on Windows, which is
@@ -193,8 +201,9 @@ can then build it the way this action does:
 
 `minimum-version`, `sha256` and `cache` are unused in that mode, and
 `NSS_PREBUILT` and the library paths point at a `dist/` the caller has yet to
-produce. `target: *-android` is rejected, because Android builds do not go through
-`build.sh`.
+produce. With an Android `target`, `NSS_BUILD_FLAGS` carries the `--target-os`
+arguments, and the checkout must be NSS 3.134 or later with NSPR 4.41 or later (its
+`nspr4` branch), since NSPR's `configure` only supports current NDKs from then on.
 
 If the `rust` action was called with `sccache: true` earlier in the same job, the `nss`
 action will detect this automatically and use sccache for the NSS build without needing
