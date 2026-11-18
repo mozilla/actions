@@ -354,7 +354,8 @@ runs:
       shell: bash
       env:
         NDK_VERSION: ${{ steps.validate.outputs.ndk-version }}
-      run: | # zizmor: ignore[github-env] The NDK has to reach build.sh and the caller's Rust build.
+      run:
+        | # zizmor: ignore[github-env] The NDK has to reach build.sh and the caller's Rust build.
         sdkmanager --install "ndk;$NDK_VERSION"
         NDK="${ANDROID_SDK_ROOT:-${ANDROID_HOME}}/ndk/$NDK_VERSION"
         [ -d "$NDK" ] || { echo "::error::NDK $NDK_VERSION not found at $NDK"; exit 1; }
