@@ -202,8 +202,8 @@ can then build it the way this action does:
 `minimum-version`, `sha256` and `cache` are unused in that mode, and
 `NSS_PREBUILT` and the library paths point at a `dist/` the caller has yet to
 produce. With an Android `target`, `NSS_BUILD_FLAGS` carries the `--target-os`
-arguments, and the checkout must be NSS 3.134 or later with NSPR 4.41 or later (its
-`nspr4` branch), since NSPR's `configure` only supports current NDKs from then on.
+arguments, and the checkout must be NSS 3.134 or later with NSPR 4.41 or later,
+since NSPR's `configure` only supports current NDKs from then on.
 
 If the `rust` action was called with `sccache: true` earlier in the same job, the `nss`
 action will detect this automatically and use sccache for the NSS build without needing

@@ -376,18 +376,12 @@ runs:
         TARGET_PLATFORM: ${{ inputs.target }}
       run: |
         [ -n "$NSS_BUILD_CFLAGS" ] && export CFLAGS="$NSS_BUILD_CFLAGS"
-        case "$TARGET_PLATFORM" in
-          *-android*)
-            # Until an NSS release bundles NSPR 4.41, which builds with a current
-            # NDK, skip the legacy toolchain setup in NSPR's configure the way
-            # 4.41 does. This finds nothing to replace in NSPR 4.41 or later.
-            sed -i'' 's/if test -z "$android_ndk" ; then/$as_echo "#define ANDROID 1" >>confdefs.h\n    ;;\nunreachable)\n    if test -z "$android_ndk" ; then/g' nspr/configure ;;
-          *)
-            # build.sh --target-os=android picks the compiler itself, so only
-            # these builds can use sccache. For i686-*-linux-gnu,
-            # gcc-multilib provides the 32-bit toolchain and headers.
-            [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ] && export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX" ;;
-        esac
+        # build.sh --target-os=android picks the compiler itself, so only the
+        # other builds can use sccache. For i686-*-linux-gnu, gcc-multilib
+        # provides the 32-bit toolchain and headers.
+        if [[ $TARGET_PLATFORM != *-android* ]] && [ "$SCCACHE_CC" ] && [ "$SCCACHE_CXX" ]; then
+          export CC="$SCCACHE_CC" CXX="$SCCACHE_CXX"
+        fi
         # shellcheck disable=SC2086
         $NSS_DIR/build.sh $NSS_BUILD_FLAGS
 
